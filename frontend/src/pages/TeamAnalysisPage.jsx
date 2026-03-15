@@ -197,7 +197,7 @@ function getRadarLabelPlacement(angle) {
 
   const textAnchor = cos > 0.35 ? 'start' : cos < -0.35 ? 'end' : 'middle'
   const dx = cos > 0.35 ? 5 : cos < -0.35 ? -5 : 0
-  const dy = sin > 0.35 ? 7 : sin < -0.35 ? -7 : 3
+  const dy = sin > 0.35 ? 4 : sin < -0.35 ? -4 : 1
 
   return {
     textAnchor,
@@ -222,6 +222,10 @@ function splitRadarLabel(label) {
 
 function TeamAnalysisPage({ team, teamLimit }) {
   const roleBreakdown = useMemo(() => buildRoleBreakdown(team), [team])
+  const teamSlots = useMemo(
+    () => Array.from({ length: teamLimit }, (_, index) => team[index] ?? null),
+    [team, teamLimit],
+  )
   const roleByPokemonId = useMemo(() => {
     const map = {}
 
@@ -262,14 +266,14 @@ function TeamAnalysisPage({ team, teamLimit }) {
 
   const radarData = useMemo(() => {
     const axisCount = ROLE_NAMES.length
-    const centerX = 130
-    const centerY = 130
-    const radius = 70
+    const centerX = 120
+    const centerY = 116
+    const radius = 78
 
     const axes = ROLE_NAMES.map((role, index) => {
       const angle = -Math.PI / 2 + (index * Math.PI * 2) / axisCount
       const end = getRadarPoint(centerX, centerY, radius, angle)
-      const label = getRadarPoint(centerX, centerY, radius + 28, angle)
+      const label = getRadarPoint(centerX, centerY, radius + 8, angle)
       const placement = getRadarLabelPlacement(angle)
       const labelLines = splitRadarLabel(role)
 
@@ -323,7 +327,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
           {team.length > 0 && (
             <>
               <section className="role-radar-wrap" aria-label="Team role radar chart">
-              <svg viewBox="0 0 260 260" className="role-radar-chart" role="img" aria-label="Pokemon team role distribution radar chart">
+              <svg viewBox="0 14 240 212" className="role-radar-chart" role="img" aria-label="Pokemon team role distribution radar chart">
                 {radarData.rings.map((ringPoints, index) => (
                   <polygon key={`ring-${index}`} points={ringPoints} className="radar-ring" />
                 ))}
@@ -366,14 +370,15 @@ function TeamAnalysisPage({ team, teamLimit }) {
               </section>
 
               <section className="type-summary-wrap" aria-label="Type weakness summary bars">
-                <h3>Team Weakness Summary</h3>
+                <h3>Type Weakness Summary</h3>
                 <ul className="type-summary-list">
                   {typeSummary.map((entry) => {
                     const total = Math.max(team.length, 1)
                     const weak4Width = (entry.weak4x / total) * 100
                     const weak2Width = (entry.weak2x / total) * 100
                     const resistLightWidth = (entry.resist05x / total) * 100
-                    const resistDarkWidth = ((entry.resist025x + entry.immune) / total) * 100
+                    const resistDarkWidth = (entry.resist025x / total) * 100
+                    const immuneWidth = (entry.immune / total) * 100
 
                     return (
                       <li key={`summary-${entry.type}`}>
@@ -381,13 +386,22 @@ function TeamAnalysisPage({ team, teamLimit }) {
                         <div className="summary-bar-track" aria-hidden="true">
                           <span className="summary-bar-weak4" style={{ width: `${weak4Width}%`, left: 0 }} />
                           <span className="summary-bar-weak2" style={{ width: `${weak2Width}%`, left: `${weak4Width}%` }} />
-                          <span className="summary-bar-resist-dark" style={{ width: `${resistDarkWidth}%`, right: 0 }} />
-                          <span className="summary-bar-resist-light" style={{ width: `${resistLightWidth}%`, right: `${resistDarkWidth}%` }} />
+                          <span className="summary-bar-immune" style={{ width: `${immuneWidth}%`, right: 0 }} />
+                          <span className="summary-bar-resist-dark" style={{ width: `${resistDarkWidth}%`, right: `${immuneWidth}%` }} />
+                          <span className="summary-bar-resist-light" style={{ width: `${resistLightWidth}%`, right: `${immuneWidth + resistDarkWidth}%` }} />
                         </div>
                       </li>
                     )
                   })}
                 </ul>
+
+                <div className="type-summary-legend" aria-label="Type weakness summary legend">
+                  <span><i className="legend-swatch weak4" aria-hidden="true" />4x weakness</span>
+                  <span><i className="legend-swatch weak2" aria-hidden="true" />2x weakness</span>
+                  <span><i className="legend-swatch resist05" aria-hidden="true" />0.5x resist</span>
+                  <span><i className="legend-swatch resist025" aria-hidden="true" />0.25x resist</span>
+                  <span><i className="legend-swatch immune" aria-hidden="true" />immune (0x)</span>
+                </div>
               </section>
             </>
           )}
@@ -395,10 +409,9 @@ function TeamAnalysisPage({ team, teamLimit }) {
 
         <section className="pixel-panel">
           <h2>Current Team ({team.length}/{teamLimit})</h2>
-          {team.length === 0 && <p className="state-text">No team found for this session. Build one first.</p>}
-          {team.length > 0 && (
-            <ul className="team-grid">
-              {team.map((pokemon) => (
+          <ul className="team-grid">
+            {teamSlots.map((pokemon, index) => (
+              pokemon ? (
                 <li key={pokemon.id} className="team-entry">
                   <div className="team-entry-sprite">
                     <img src={pokemon.sprite} alt={pokemon.name} width="56" height="56" />
@@ -426,9 +439,20 @@ function TeamAnalysisPage({ team, teamLimit }) {
                   </div>
                   <span className="team-entry-action-spacer" aria-hidden="true" />
                 </li>
-              ))}
-            </ul>
-          )}
+              ) : (
+                <li key={`analysis-empty-slot-${index}`} className="team-entry placeholder">
+                  <div className="team-entry-sprite placeholder" aria-hidden="true" />
+                  <div className="team-entry-details">
+                    <div className="team-entry-head">
+                      <h3>Empty</h3>
+                    </div>
+                    <p className="team-entry-placeholder-text">Add another Pokemon!</p>
+                  </div>
+                  <span className="team-entry-action-spacer" aria-hidden="true" />
+                </li>
+              )
+            ))}
+          </ul>
 
           <Link to="/" className="analysis-nav-button">Team Builder</Link>
         </section>

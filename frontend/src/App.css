@@ -371,15 +371,15 @@
 .role-radar-wrap {
   border: 2px solid var(--ink);
   background: #ffffff;
-  padding: 0.45rem;
-  margin: 0.25rem 0 0.75rem;
+  padding: 0.35rem;
+  margin: 0.18rem 0 0.45rem;
 }
 
 .role-radar-chart {
   width: 100%;
-  max-width: 420px;
+  max-width: 380px;
   display: block;
-  margin: 0 auto 0.45rem;
+  margin: 0.15rem auto;
   overflow: visible;
 }
 
@@ -443,7 +443,8 @@
 .summary-bar-weak4,
 .summary-bar-weak2,
 .summary-bar-resist-light,
-.summary-bar-resist-dark {
+.summary-bar-resist-dark,
+.summary-bar-immune {
   position: absolute;
   top: 0;
   height: 100%;
@@ -463,6 +464,55 @@
 
 .summary-bar-resist-dark {
   background: #0d4b22;
+}
+
+.summary-bar-immune {
+  background: #2f73d6;
+}
+
+.type-summary-legend {
+  margin-top: 0.45rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed #9d9d9d;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.7rem;
+  font-size: 0.52rem;
+  overflow-x: auto;
+}
+
+.type-summary-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  white-space: nowrap;
+}
+
+.legend-swatch {
+  width: 0.74rem;
+  height: 0.52rem;
+  border: 1px solid var(--ink);
+  flex: 0 0 auto;
+}
+
+.legend-swatch.weak4 {
+  background: #7e0000;
+}
+
+.legend-swatch.weak2 {
+  background: #d34a4a;
+}
+
+.legend-swatch.resist05 {
+  background: #39a15d;
+}
+
+.legend-swatch.resist025 {
+  background: #0d4b22;
+}
+
+.legend-swatch.immune {
+  background: #2f73d6;
 }
 
 .radar-ring {
@@ -542,6 +592,11 @@
   background: #ffffff;
 }
 
+.team-entry.placeholder {
+  background: #f5f5f5;
+  border-style: dashed;
+}
+
 .team-entry-sprite {
   width: 64px;
   height: 64px;
@@ -550,6 +605,11 @@
   background: #ffffff;
   display: grid;
   place-items: center;
+}
+
+.team-entry-sprite.placeholder {
+  border-style: dashed;
+  background: #f3f3f3;
 }
 
 .team-entry-details {
@@ -576,6 +636,12 @@
 .team-entry-head span {
   font-size: 0.5rem;
   color: #474747;
+}
+
+.team-entry-placeholder-text {
+  margin: 0.2rem 0 0;
+  font-size: 0.52rem;
+  color: #666;
 }
 
 .team-stats-inline {

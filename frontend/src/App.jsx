@@ -113,6 +113,10 @@ function App() {
   }, [allPokemon, query])
 
   const teamIds = useMemo(() => new Set(team.map((pokemon) => pokemon.id)), [team])
+  const teamSlots = useMemo(
+    () => Array.from({ length: TEAM_LIMIT }, (_, index) => team[index] ?? null),
+    [team],
+  )
 
   useEffect(() => {
     sessionStorage.setItem(TEAM_STORAGE_KEY, JSON.stringify(team))
@@ -308,40 +312,51 @@ function App() {
               <section className="pixel-panel">
                 <h2>Current Team ({team.length}/{TEAM_LIMIT})</h2>
 
-                {team.length === 0 && <p className="state-text">Your team is empty.</p>}
-
                 <ul className="team-grid">
-                  {team.map((pokemon) => (
-                    <li key={pokemon.id} className="team-entry">
-                      <div className="team-entry-sprite">
-                        <img src={pokemon.sprite} alt={pokemon.name} width="56" height="56" />
-                      </div>
-                      <div className="team-entry-details">
-                        <div className="team-entry-head">
-                          <h3>{pokemon.name}</h3>
+                  {teamSlots.map((pokemon, index) => (
+                    pokemon ? (
+                      <li key={pokemon.id} className="team-entry">
+                        <div className="team-entry-sprite">
+                          <img src={pokemon.sprite} alt={pokemon.name} width="56" height="56" />
                         </div>
+                        <div className="team-entry-details">
+                          <div className="team-entry-head">
+                            <h3>{pokemon.name}</h3>
+                          </div>
 
-                        <div className="type-badges compact" aria-label={`${pokemon.name} types`}>
-                          {pokemon.types.map((type) => (
-                            <span key={`${pokemon.id}-${type}`} className={`type-badge type-${type}`}>
-                              {type}
-                            </span>
-                          ))}
+                          <div className="type-badges compact" aria-label={`${pokemon.name} types`}>
+                            {pokemon.types.map((type) => (
+                              <span key={`${pokemon.id}-${type}`} className={`type-badge type-${type}`}>
+                                {type}
+                              </span>
+                            ))}
+                          </div>
+
+                          <ul className="team-stats-inline">
+                            {pokemon.stats.map((stat) => (
+                              <li key={`${pokemon.id}-${stat.name}`}>
+                                <span>{statLabels[stat.name] ?? stat.name}</span>
+                                <strong>{stat.baseStat}</strong>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
-
-                        <ul className="team-stats-inline">
-                          {pokemon.stats.map((stat) => (
-                            <li key={`${pokemon.id}-${stat.name}`}>
-                              <span>{statLabels[stat.name] ?? stat.name}</span>
-                              <strong>{stat.baseStat}</strong>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <button type="button" className="remove-button inline" onClick={() => handleRemoveFromTeam(pokemon.id)}>
-                        X
-                      </button>
-                    </li>
+                        <button type="button" className="remove-button inline" onClick={() => handleRemoveFromTeam(pokemon.id)}>
+                          X
+                        </button>
+                      </li>
+                    ) : (
+                      <li key={`empty-slot-${index}`} className="team-entry placeholder">
+                        <div className="team-entry-sprite placeholder" aria-hidden="true" />
+                        <div className="team-entry-details">
+                          <div className="team-entry-head">
+                            <h3>Empty</h3>
+                          </div>
+                          <p className="team-entry-placeholder-text">Add another Pokemon!</p>
+                        </div>
+                        <span className="team-entry-action-spacer" aria-hidden="true" />
+                      </li>
+                    )
                   ))}
                 </ul>
 
