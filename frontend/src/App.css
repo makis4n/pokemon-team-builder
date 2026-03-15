@@ -488,6 +488,80 @@
   white-space: nowrap;
 }
 
+.role-insights-wrap {
+  border: 2px solid var(--ink);
+  background: #ffffff;
+  padding: 0.45rem;
+  margin-top: 0.4rem;
+}
+
+.role-insights-wrap h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.role-insights-status {
+  margin: 0;
+  border: 2px solid var(--ink);
+  padding: 0.28rem 0.35rem;
+  font-size: 0.54rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.role-insights-status.balanced {
+  background: #d9f1de;
+  color: #174d23;
+}
+
+.role-insights-status.imbalanced {
+  background: #ffe2e2;
+  color: #7b1111;
+}
+
+.role-insights-grid {
+  margin: 0.4rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.28rem;
+}
+
+.role-insights-grid div {
+  border: 1px solid var(--ink);
+  background: #f7f7f7;
+  padding: 0.22rem 0.28rem;
+}
+
+.role-insights-grid dt {
+  margin: 0;
+  font-size: 0.42rem;
+  text-transform: uppercase;
+  color: #474747;
+}
+
+.role-insights-grid dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #111111;
+}
+
+.role-insights-splits,
+.role-insights-issues {
+  margin: 0.4rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.53rem;
+}
+
+.role-insights-splits {
+  color: #2b2b2b;
+}
+
+.role-insights-issues {
+  color: #7b1111;
+}
+
 .legend-swatch {
   width: 0.74rem;
   height: 0.52rem;
@@ -721,6 +795,10 @@
   .summary-bar-track {
     width: 100%;
     max-width: none;
+  }
+
+  .role-insights-grid {
+    grid-template-columns: 1fr;
   }
 
 }

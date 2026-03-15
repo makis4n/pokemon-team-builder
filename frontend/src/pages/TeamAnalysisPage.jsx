@@ -1,224 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useMemo } from 'react'
-import TYPE_CHART from '../data/typeChart'
-
-const statLabels = {
-  hp: 'HP',
-  attack: 'ATK',
-  defense: 'DEF',
-  'special-attack': 'SP.ATK',
-  'special-defense': 'SP.DEF',
-  speed: 'SPD',
-}
-
-const ROLE_NAMES = [
-  'Physical Sweeper',
-  'Special Sweeper',
-  'Physical Wall',
-  'Special Wall',
-  'Tank',
-  'Wallbreaker',
-  'Fast Support',
-]
-
-const ATTACKING_TYPES = Object.keys(TYPE_CHART)
-
-const WEAKNESS_SCORES = {
-  4: 8,
-  2: 3,
-  1: 0,
-  0.5: -1,
-  0.25: -2,
-  0: -3,
-}
-
-function getStatValue(stats, statName) {
-  const match = stats.find((stat) => stat.name === statName)
-  return match ? match.baseStat : 0
-}
-
-function getRoleScores(stats) {
-  const hp = getStatValue(stats, 'hp')
-  const attack = getStatValue(stats, 'attack')
-  const defense = getStatValue(stats, 'defense')
-  const specialAttack = getStatValue(stats, 'special-attack')
-  const specialDefense = getStatValue(stats, 'special-defense')
-  const speed = getStatValue(stats, 'speed')
-
-  return {
-    'Physical Sweeper': attack / 100 + speed / 100 - defense / 200,
-    'Special Sweeper': specialAttack / 100 + speed / 100 - specialDefense / 200,
-    'Physical Wall': defense / 100 + hp / 100 - speed / 200,
-    'Special Wall': specialDefense / 100 + hp / 100 - speed / 200,
-    'Tank': hp / 100 + defense / 200 + specialDefense / 200,
-    'Wallbreaker': attack / 100 + specialAttack / 100 - speed / 200,
-    'Fast Support': speed / 100 - attack / 200 - specialAttack / 200,
-  }
-}
-
-function classifyPokemonRole(pokemon) {
-  const scores = getRoleScores(pokemon.stats)
-  let bestRole = ROLE_NAMES[0]
-  let bestScore = Number.NEGATIVE_INFINITY
-
-  for (const role of ROLE_NAMES) {
-    const score = scores[role]
-    if (score > bestScore) {
-      bestScore = score
-      bestRole = role
-    }
-  }
-
-  return {
-    pokemonId: pokemon.id,
-    pokemonName: pokemon.name,
-    role: bestRole,
-    topScore: bestScore,
-    scores,
-  }
-}
-
-function getDefensiveProfile(types) {
-  return ATTACKING_TYPES.reduce((profile, attackingType) => {
-    let multiplier = 1
-
-    for (const defendingType of types) {
-      const chart = TYPE_CHART[attackingType] || {}
-      multiplier *= chart[defendingType] ?? 1
-    }
-
-    profile[attackingType] = multiplier
-    return profile
-  }, {})
-}
-
-function categoriseProfile(profile) {
-  const categories = {
-    weakness: [],
-    quadWeakness: [],
-    resistance: [],
-    doubleResist: [],
-    immunities: [],
-  }
-
-  for (const attackingType of ATTACKING_TYPES) {
-    const multiplier = profile[attackingType] ?? 1
-
-    if (multiplier === 0) {
-      categories.immunities.push(attackingType)
-    } else if (Math.abs(multiplier - 4) < 0.001) {
-      categories.quadWeakness.push(attackingType)
-    } else if (multiplier > 1) {
-      categories.weakness.push(attackingType)
-    } else if (Math.abs(multiplier - 0.25) < 0.001) {
-      categories.doubleResist.push(attackingType)
-    } else if (multiplier < 1) {
-      categories.resistance.push(attackingType)
-    }
-  }
-
-  return categories
-}
-
-function analyseTeamWeaknesses(team) {
-  const summaryByType = ATTACKING_TYPES.reduce((accumulator, type) => {
-    accumulator[type] = {
-      weak2x: 0,
-      weak4x: 0,
-      resist05x: 0,
-      resist025x: 0,
-      immune: 0,
-    }
-    return accumulator
-  }, {})
-
-  for (const pokemon of team) {
-    const profile = getDefensiveProfile(pokemon.types)
-    const categories = categoriseProfile(profile)
-
-    for (const type of categories.weakness) {
-      summaryByType[type].weak2x += 1
-    }
-    for (const type of categories.quadWeakness) {
-      summaryByType[type].weak4x += 1
-    }
-    for (const type of categories.resistance) {
-      summaryByType[type].resist05x += 1
-    }
-    for (const type of categories.doubleResist) {
-      summaryByType[type].resist025x += 1
-    }
-    for (const type of categories.immunities) {
-      summaryByType[type].immune += 1
-    }
-  }
-
-  const ranked = ATTACKING_TYPES.map((type) => ({ type, ...summaryByType[type] }))
-
-  return ranked
-}
-
-function buildRoleBreakdown(team) {
-  const averageScores = ROLE_NAMES.reduce((accumulator, role) => {
-    accumulator[role] = 0
-    return accumulator
-  }, {})
-
-  const assignments = team.map(classifyPokemonRole)
-
-  if (assignments.length > 0) {
-    for (const assignment of assignments) {
-      for (const role of ROLE_NAMES) {
-        averageScores[role] += assignment.scores[role]
-      }
-    }
-
-    for (const role of ROLE_NAMES) {
-      averageScores[role] /= assignments.length
-    }
-  }
-
-  return {
-    averageScores,
-    assignments,
-  }
-}
-
-function getRadarPoint(centerX, centerY, radius, angle) {
-  return {
-    x: centerX + radius * Math.cos(angle),
-    y: centerY + radius * Math.sin(angle),
-  }
-}
-
-function getRadarLabelPlacement(angle) {
-  const cos = Math.cos(angle)
-  const sin = Math.sin(angle)
-
-  const textAnchor = cos > 0.35 ? 'start' : cos < -0.35 ? 'end' : 'middle'
-  const dx = cos > 0.35 ? 5 : cos < -0.35 ? -5 : 0
-  const dy = sin > 0.35 ? 4 : sin < -0.35 ? -4 : 1
-
-  return {
-    textAnchor,
-    dx,
-    dy,
-  }
-}
-
-function splitRadarLabel(label) {
-  const words = label.split(' ')
-  if (words.length <= 1) {
-    return [label]
-  }
-
-  if (words.length === 2) {
-    return words
-  }
-
-  const midpoint = Math.ceil(words.length / 2)
-  return [words.slice(0, midpoint).join(' '), words.slice(midpoint).join(' ')]
-}
+import { analyzeTeamBalance } from '../features/team-analysis/balanceAnalysis'
+import { ROLE_NAMES, statLabels } from '../features/team-analysis/constants'
+import { buildRadarData } from '../features/team-analysis/radar'
+import {
+  buildRoleBreakdown,
+  buildRoleByPokemonId,
+} from '../features/team-analysis/roleAnalysis'
+import { computeWeightedTypeSummary } from '../features/team-analysis/typeAnalysis'
 
 function TeamAnalysisPage({ team, teamLimit }) {
   const roleBreakdown = useMemo(() => buildRoleBreakdown(team), [team])
@@ -226,93 +15,23 @@ function TeamAnalysisPage({ team, teamLimit }) {
     () => Array.from({ length: teamLimit }, (_, index) => team[index] ?? null),
     [team, teamLimit],
   )
-  const roleByPokemonId = useMemo(() => {
-    const map = {}
 
-    for (const assignment of roleBreakdown.assignments) {
-      map[assignment.pokemonId] = assignment.role
-    }
+  const roleByPokemonId = useMemo(
+    () => buildRoleByPokemonId(roleBreakdown.assignments),
+    [roleBreakdown.assignments],
+  )
 
-    return map
-  }, [roleBreakdown.assignments])
+  const typeSummary = useMemo(() => computeWeightedTypeSummary(team), [team])
 
-  const typeSummary = useMemo(() => {
-    return analyseTeamWeaknesses(team)
-      .map((entry) => ({
-        ...entry,
-        weightedScore:
-          entry.weak4x * WEAKNESS_SCORES[4] +
-          entry.weak2x * WEAKNESS_SCORES[2] +
-          entry.resist05x * WEAKNESS_SCORES[0.5] +
-          entry.resist025x * WEAKNESS_SCORES[0.25] +
-          entry.immune * WEAKNESS_SCORES[0],
-      }))
-      .sort((left, right) => {
-        if (left.weightedScore !== right.weightedScore) {
-          return right.weightedScore - left.weightedScore
-        }
+  const radarData = useMemo(
+    () => buildRadarData(roleBreakdown.averageScores, ROLE_NAMES),
+    [roleBreakdown.averageScores],
+  )
 
-        if (left.immune !== right.immune) {
-          return left.immune - right.immune
-        }
-
-        return left.type.localeCompare(right.type)
-      })
-  }, [team])
-  const maxRoleValue = useMemo(() => {
-    const highest = Math.max(...Object.values(roleBreakdown.averageScores), 0)
-    return highest > 0 ? highest : 1
-  }, [roleBreakdown.averageScores])
-
-  const radarData = useMemo(() => {
-    const axisCount = ROLE_NAMES.length
-    const centerX = 120
-    const centerY = 116
-    const radius = 78
-
-    const axes = ROLE_NAMES.map((role, index) => {
-      const angle = -Math.PI / 2 + (index * Math.PI * 2) / axisCount
-      const end = getRadarPoint(centerX, centerY, radius, angle)
-      const label = getRadarPoint(centerX, centerY, radius + 8, angle)
-      const placement = getRadarLabelPlacement(angle)
-      const labelLines = splitRadarLabel(role)
-
-      return {
-        role,
-        angle,
-        end,
-        label,
-        placement,
-        labelLines,
-      }
-    })
-
-    const rings = [0.25, 0.5, 0.75, 1].map((ratio) => {
-      const points = axes.map((axis) => {
-        const point = getRadarPoint(centerX, centerY, radius * ratio, axis.angle)
-        return `${point.x},${point.y}`
-      })
-
-      return points.join(' ')
-    })
-
-    const dataPolygon = axes
-      .map((axis) => {
-        const value = roleBreakdown.averageScores[axis.role]
-        const ratio = Math.max(value, 0) / maxRoleValue
-        const point = getRadarPoint(centerX, centerY, radius * ratio, axis.angle)
-        return `${point.x},${point.y}`
-      })
-      .join(' ')
-
-    return {
-      axes,
-      rings,
-      dataPolygon,
-      centerX,
-      centerY,
-    }
-  }, [roleBreakdown.averageScores, maxRoleValue])
+  const balanceAnalysis = useMemo(
+    () => analyzeTeamBalance(team, roleBreakdown.assignments),
+    [team, roleBreakdown.assignments],
+  )
 
   return (
     <main className="app-shell">
@@ -327,46 +46,45 @@ function TeamAnalysisPage({ team, teamLimit }) {
           {team.length > 0 && (
             <>
               <section className="role-radar-wrap" aria-label="Team role radar chart">
-              <svg viewBox="0 14 240 212" className="role-radar-chart" role="img" aria-label="Pokemon team role distribution radar chart">
-                {radarData.rings.map((ringPoints, index) => (
-                  <polygon key={`ring-${index}`} points={ringPoints} className="radar-ring" />
-                ))}
+                <svg viewBox="0 14 240 212" className="role-radar-chart" role="img" aria-label="Pokemon team role distribution radar chart">
+                  {radarData.rings.map((ringPoints, index) => (
+                    <polygon key={`ring-${index}`} points={ringPoints} className="radar-ring" />
+                  ))}
 
-                {radarData.axes.map((axis) => (
-                  <line
-                    key={`axis-${axis.role}`}
-                    x1={radarData.centerX}
-                    y1={radarData.centerY}
-                    x2={axis.end.x}
-                    y2={axis.end.y}
-                    className="radar-axis"
-                  />
-                ))}
+                  {radarData.axes.map((axis) => (
+                    <line
+                      key={`axis-${axis.role}`}
+                      x1={radarData.centerX}
+                      y1={radarData.centerY}
+                      x2={axis.end.x}
+                      y2={axis.end.y}
+                      className="radar-axis"
+                    />
+                  ))}
 
-                <polygon points={radarData.dataPolygon} className="radar-shape" />
+                  <polygon points={radarData.dataPolygon} className="radar-shape" />
 
-                {radarData.axes.map((axis) => (
-                  <text
-                    key={`label-${axis.role}`}
-                    x={axis.label.x + axis.placement.dx}
-                    y={axis.label.y + axis.placement.dy}
-                    textAnchor={axis.placement.textAnchor}
-                    dominantBaseline="middle"
-                    className="radar-label"
-                  >
-                    {axis.labelLines.map((line, lineIndex) => (
-                      <tspan
+                  {radarData.axes.map((axis) => (
+                    <text
+                      key={`label-${axis.role}`}
+                      x={axis.label.x + axis.placement.dx}
+                      y={axis.label.y + axis.placement.dy}
+                      textAnchor={axis.placement.textAnchor}
+                      dominantBaseline="middle"
+                      className="radar-label"
+                    >
+                      {axis.labelLines.map((line, lineIndex) => (
+                        <tspan
                           key={`${axis.role}-${lineIndex}`}
-                        x={axis.label.x + axis.placement.dx}
-                        dy={lineIndex === 0 ? 0 : '1.05em'}
-                      >
-                        {line}
-                      </tspan>
-                    ))}
-                  </text>
-                ))}
-              </svg>
-
+                          x={axis.label.x + axis.placement.dx}
+                          dy={lineIndex === 0 ? 0 : '1.05em'}
+                        >
+                          {line}
+                        </tspan>
+                      ))}
+                    </text>
+                  ))}
+                </svg>
               </section>
 
               <section className="type-summary-wrap" aria-label="Type weakness summary bars">
@@ -388,7 +106,10 @@ function TeamAnalysisPage({ team, teamLimit }) {
                           <span className="summary-bar-weak2" style={{ width: `${weak2Width}%`, left: `${weak4Width}%` }} />
                           <span className="summary-bar-immune" style={{ width: `${immuneWidth}%`, right: 0 }} />
                           <span className="summary-bar-resist-dark" style={{ width: `${resistDarkWidth}%`, right: `${immuneWidth}%` }} />
-                          <span className="summary-bar-resist-light" style={{ width: `${resistLightWidth}%`, right: `${immuneWidth + resistDarkWidth}%` }} />
+                          <span
+                            className="summary-bar-resist-light"
+                            style={{ width: `${resistLightWidth}%`, right: `${immuneWidth + resistDarkWidth}%` }}
+                          />
                         </div>
                       </li>
                     )
