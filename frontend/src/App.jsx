@@ -1,379 +1,54 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
+import { TEAM_LIMIT } from './features/team-builder/constants'
+import { getSafeTeamFromSession, saveTeamToSession } from './features/team-builder/storage'
 import TeamAnalysisPage from './pages/TeamAnalysisPage'
-
-const TEAM_LIMIT = 6
-const TEAM_STORAGE_KEY = 'pokemon-team-builder:team'
-
-const statLabels = {
-  hp: 'HP',
-  attack: 'ATK',
-  defense: 'DEF',
-  'special-attack': 'SP.ATK',
-  'special-defense': 'SP.DEF',
-  speed: 'SPD',
-}
-
-function formatAbilityList(abilities) {
-  return abilities
-    .map((ability) => (typeof ability === 'string' ? ability : ability.name))
-    .join(', ')
-}
-
-function getSafeTeamFromSession() {
-  try {
-    const rawValue = sessionStorage.getItem(TEAM_STORAGE_KEY)
-
-    if (!rawValue) {
-      return []
-    }
-
-    const parsedValue = JSON.parse(rawValue)
-    return Array.isArray(parsedValue) ? parsedValue : []
-  } catch {
-    return []
-  }
-}
-
-async function fetchJson(url) {
-  const response = await fetch(url)
-
-  if (!response.ok) {
-    const fallbackMessage = `Request failed with status ${response.status}`
-    let message = fallbackMessage
-
-    try {
-      const payload = await response.json()
-      if (payload?.error?.message) {
-        message = payload.error.message
-      }
-    } catch {
-      message = fallbackMessage
-    }
-
-    throw new Error(message)
-  }
-
-  return response.json()
-}
+import TeamBuilderPage from './pages/TeamBuilderPage'
 
 function App() {
-  const [allPokemon, setAllPokemon] = useState([])
-  const [query, setQuery] = useState('')
-  const [selectedPokemon, setSelectedPokemon] = useState(null)
   const [team, setTeam] = useState(() => getSafeTeamFromSession())
-  const [isListLoading, setIsListLoading] = useState(true)
-  const [isDetailLoading, setIsDetailLoading] = useState(false)
-  const [listError, setListError] = useState('')
-  const [detailError, setDetailError] = useState('')
-
-  useEffect(() => {
-    let isActive = true
-
-    async function loadPokemonList() {
-      setIsListLoading(true)
-      setListError('')
-
-      try {
-        /* Limit to 9999 so that no special forms are shown */
-        const payload = await fetchJson('/api/pokemon?limit=1025')
-        if (!isActive) {
-          return
-        }
-        setAllPokemon(payload.data ?? [])
-      } catch (error) {
-        if (!isActive) {
-          return
-        }
-        setListError(error.message)
-      } finally {
-        if (isActive) {
-          setIsListLoading(false)
-        }
-      }
-    }
-
-    loadPokemonList()
-
-    return () => {
-      isActive = false
-    }
-  }, [])
-
-  const filteredPokemon = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    if (!normalizedQuery) {
-      return allPokemon.slice(0, 50)
-    }
-
-    return allPokemon
-      .filter((pokemon) => pokemon.name.startsWith(normalizedQuery))
-      .slice(0, 50)
-  }, [allPokemon, query])
 
   const teamIds = useMemo(() => new Set(team.map((pokemon) => pokemon.id)), [team])
-  const teamSlots = useMemo(
-    () => Array.from({ length: TEAM_LIMIT }, (_, index) => team[index] ?? null),
-    [team],
-  )
 
   useEffect(() => {
-    sessionStorage.setItem(TEAM_STORAGE_KEY, JSON.stringify(team))
+    saveTeamToSession(team)
   }, [team])
 
-  async function loadPokemonDetail(nameOrId) {
-    if (!nameOrId) {
-      return
-    }
-
-    setIsDetailLoading(true)
-    setDetailError('')
-
-    try {
-      const payload = await fetchJson(`/api/pokemon/${encodeURIComponent(nameOrId)}`)
-      setSelectedPokemon(payload.data)
-    } catch (error) {
-      setDetailError(error.message)
-    } finally {
-      setIsDetailLoading(false)
-    }
-  }
-
-  function handleAddToTeam() {
-    if (!selectedPokemon) {
-      return
-    }
-
+  function handleAddToTeam(selectedPokemon) {
     if (team.length >= TEAM_LIMIT) {
-      setDetailError('Your team is full. Remove one Pokemon first.')
-      return
+      return {
+        ok: false,
+        message: 'Your team is full. Remove one Pokemon first.',
+      }
     }
 
     if (teamIds.has(selectedPokemon.id)) {
-      setDetailError('This Pokemon is already in your team.')
-      return
+      return {
+        ok: false,
+        message: 'This Pokemon is already in your team.',
+      }
     }
 
     setTeam((currentTeam) => [...currentTeam, selectedPokemon])
-    setDetailError('')
+    return { ok: true }
   }
 
   function handleRemoveFromTeam(pokemonId) {
     setTeam((currentTeam) => currentTeam.filter((pokemon) => pokemon.id !== pokemonId))
   }
 
-  function handleExactSearch(event) {
-    event.preventDefault()
-    loadPokemonDetail(query.trim().toLowerCase())
-  }
-
-  const typeSummary = useMemo(() => {
-    const counts = {}
-
-    for (const pokemon of team) {
-      for (const type of pokemon.types) {
-        counts[type] = (counts[type] || 0) + 1
-      }
-    }
-
-    return Object.entries(counts).sort((left, right) => right[1] - left[1])
-  }, [team])
-
-  const statSummary = useMemo(() => {
-    if (team.length === 0) {
-      return []
-    }
-
-    const totals = {}
-
-    for (const pokemon of team) {
-      for (const stat of pokemon.stats) {
-        totals[stat.name] = (totals[stat.name] || 0) + stat.baseStat
-      }
-    }
-
-    return Object.entries(totals).map(([statName, total]) => ({
-      name: statLabels[statName] ?? statName,
-      average: Math.round(total / team.length),
-    }))
-  }, [team])
-
   return (
     <Routes>
       <Route
         path="/"
         element={
-          <main className="app-shell">
-            <header className="top-banner">
-              <h1>Pokemon Team Builder</h1>
-            </header>
-
-            <section className="panel-grid">
-              <section className="pixel-panel">
-                <h2>Select Pokemon</h2>
-
-                <form className="search-form" onSubmit={handleExactSearch}>
-                  <input
-                    type="text"
-                    placeholder="e.g. pikachu"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                  <button type="submit">Search</button>
-                </form>
-
-                {isListLoading && <p className="state-text">Loading Pokemon list...</p>}
-                {listError && <p className="state-text error">{listError}</p>}
-
-                {!isListLoading && !listError && (
-                  <ul className="pokemon-list">
-                    {filteredPokemon.length === 0 && (
-                      <li className="state-text">No Pokemon matched your search.</li>
-                    )}
-
-                    {filteredPokemon.map((pokemon) => (
-                      <li key={pokemon.id}>
-                        <button
-                          type="button"
-                          className="pokemon-row"
-                          onClick={() => loadPokemonDetail(pokemon.name)}
-                        >
-                          <span>#{String(pokemon.id).padStart(3, '0')}</span>
-                          <strong>{pokemon.name}</strong>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
-              <section className="pixel-panel">
-                <h2>Pokemon Info</h2>
-
-                {isDetailLoading && <p className="state-text">Loading details...</p>}
-                {!isDetailLoading && detailError && <p className="state-text error">{detailError}</p>}
-
-                {!isDetailLoading && !selectedPokemon && !detailError && (
-                  <p className="state-text">Choose a Pokemon from the left panel to inspect details.</p>
-                )}
-
-                {selectedPokemon && !isDetailLoading && (
-                  <article className="pokemon-card">
-                    <div className="pokemon-card-head">
-                      <img
-                        src={selectedPokemon.sprite}
-                        alt={selectedPokemon.name}
-                        width="96"
-                        height="96"
-                      />
-                      <div>
-                        <h3>{selectedPokemon.name}</h3>
-                        <p>#{String(selectedPokemon.id).padStart(3, '0')}</p>
-                      </div>
-                    </div>
-
-                    <p>
-                      <span className="label">Types:</span>
-                    </p>
-                    <div className="type-badges" aria-label="Pokemon types">
-                      {selectedPokemon.types.map((type) => (
-                        <span key={type} className={`type-badge type-${type}`}>
-                          {type}
-                        </span>
-                      ))}
-                    </div>
-                    <p>
-                      <span className="label">Abilities:</span> {formatAbilityList(selectedPokemon.abilities)}
-                    </p>
-
-                    <h4>Base Stats</h4>
-                    <ul className="stats-list">
-                      {selectedPokemon.stats.map((stat) => (
-                        <li key={stat.name}>
-                          <span>{statLabels[stat.name] ?? stat.name}</span>
-                          <strong>{stat.baseStat}</strong>
-                        </li>
-                      ))}
-                    </ul>
-
-                    <button
-                      type="button"
-                      className="add-button"
-                      onClick={handleAddToTeam}
-                      disabled={team.length >= TEAM_LIMIT || teamIds.has(selectedPokemon.id)}
-                    >
-                      Add To Team
-                    </button>
-                  </article>
-                )}
-              </section>
-
-              <section className="pixel-panel">
-                <h2>Current Team ({team.length}/{TEAM_LIMIT})</h2>
-
-                <ul className="team-grid">
-                  {teamSlots.map((pokemon, index) => (
-                    pokemon ? (
-                      <li key={pokemon.id} className="team-entry">
-                        <div className="team-entry-sprite">
-                          <img src={pokemon.sprite} alt={pokemon.name} width="56" height="56" />
-                        </div>
-                        <div className="team-entry-details">
-                          <div className="team-entry-head">
-                            <h3>{pokemon.name}</h3>
-                          </div>
-
-                          <div className="type-badges compact" aria-label={`${pokemon.name} types`}>
-                            {pokemon.types.map((type) => (
-                              <span key={`${pokemon.id}-${type}`} className={`type-badge type-${type}`}>
-                                {type}
-                              </span>
-                            ))}
-                          </div>
-
-                          <ul className="team-stats-inline">
-                            {pokemon.stats.map((stat) => (
-                              <li key={`${pokemon.id}-${stat.name}`}>
-                                <span>{statLabels[stat.name] ?? stat.name}</span>
-                                <strong>{stat.baseStat}</strong>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                        <button type="button" className="remove-button inline" onClick={() => handleRemoveFromTeam(pokemon.id)}>
-                          X
-                        </button>
-                      </li>
-                    ) : (
-                      <li key={`empty-slot-${index}`} className="team-entry placeholder">
-                        <div className="team-entry-sprite placeholder" aria-hidden="true" />
-                        <div className="team-entry-details">
-                          <div className="team-entry-head">
-                            <h3>Empty</h3>
-                          </div>
-                          <p className="team-entry-placeholder-text">Add another Pokemon!</p>
-                        </div>
-                        <span className="team-entry-action-spacer" aria-hidden="true" />
-                      </li>
-                    )
-                  ))}
-                </ul>
-
-                <Link
-                  to="/analysis"
-                  className={`analysis-nav-button ${team.length === 0 ? 'disabled' : ''}`}
-                  onClick={(event) => {
-                    if (team.length === 0) {
-                      event.preventDefault()
-                    }
-                  }}
-                >
-                  Analyse Team
-                </Link>
-              </section>
-            </section>
-          </main>
+          <TeamBuilderPage
+            team={team}
+            teamLimit={TEAM_LIMIT}
+            onAddPokemonToTeam={handleAddToTeam}
+            onRemovePokemonFromTeam={handleRemoveFromTeam}
+          />
         }
       />
 
@@ -383,8 +58,6 @@ function App() {
           <TeamAnalysisPage
             team={team}
             teamLimit={TEAM_LIMIT}
-            typeSummary={typeSummary}
-            statSummary={statSummary}
           />
         }
       />

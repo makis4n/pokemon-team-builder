@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import { useMemo } from 'react'
-import { analyzeTeamBalance } from '../features/team-analysis/balanceAnalysis'
 import { ROLE_NAMES, statLabels } from '../features/team-analysis/constants'
 import { buildRadarData } from '../features/team-analysis/radar'
 import {
@@ -26,11 +25,6 @@ function TeamAnalysisPage({ team, teamLimit }) {
   const radarData = useMemo(
     () => buildRadarData(roleBreakdown.averageScores, ROLE_NAMES),
     [roleBreakdown.averageScores],
-  )
-
-  const balanceAnalysis = useMemo(
-    () => analyzeTeamBalance(team, roleBreakdown.assignments),
-    [team, roleBreakdown.assignments],
   )
 
   return (
