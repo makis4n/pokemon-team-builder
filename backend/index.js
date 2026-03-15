@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const pokemonRouter = require('./src/routes/pokemon');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -12,6 +13,31 @@ app.get('/health', (_req, res) => {
     status: 'ok',
     service: 'pokemon-team-builder-backend',
     timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/ping', (_req, res) => {
+  res.status(200).json({ message: 'API is reachable' });
+});
+
+app.use('/api/pokemon', pokemonRouter);
+
+app.use((req, res) => {
+  res.status(404).json({
+    error: {
+      message: `Route not found: ${req.method} ${req.originalUrl}`,
+    },
+  });
+});
+
+app.use((error, _req, res, _next) => {
+  const statusCode = error.statusCode || 500;
+  const message = statusCode === 500 ? 'Internal server error' : error.message;
+
+  res.status(statusCode).json({
+    error: {
+      message,
+    },
   });
 });
 
