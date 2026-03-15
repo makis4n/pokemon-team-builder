@@ -1,6 +1,7 @@
 const { TYPE_CHART } = require('./pokeapi');
 
 const WEAKNESS_RATIO_THRESHOLD = 0.5;
+const STAT_GAIN_SCORE_WEIGHT = 0.1;
 const WEAKNESS_SCORES = {
   4: 8,
   2: 3,
@@ -343,6 +344,15 @@ function scoreSwap(baselineMetrics, nextMetrics, improvedTypes, newCoverageTypes
   );
 }
 
+function getAverageBaseStat(pokemon) {
+  if (!pokemon?.stats?.length) {
+    return 0;
+  }
+
+  const total = pokemon.stats.reduce((sum, stat) => sum + (stat?.baseStat ?? 0), 0);
+  return total / pokemon.stats.length;
+}
+
 function buildRecommendationReason(parts) {
   if (parts.length === 0) {
     return 'Small defensive improvement.';
@@ -354,7 +364,9 @@ function buildRecommendationReason(parts) {
 function buildRecommendation(outgoingPokemon, incomingPokemon, baselineMetrics, nextMetrics) {
   const improvedTypes = buildImprovedTypes(baselineMetrics, nextMetrics);
   const newCoverageTypes = buildNewCoverageTypes(baselineMetrics, nextMetrics);
-  const score = scoreSwap(baselineMetrics, nextMetrics, improvedTypes, newCoverageTypes);
+  const baseScore = scoreSwap(baselineMetrics, nextMetrics, improvedTypes, newCoverageTypes);
+  const averageStatGain = getAverageBaseStat(incomingPokemon) - getAverageBaseStat(outgoingPokemon);
+  const score = baseScore + averageStatGain * STAT_GAIN_SCORE_WEIGHT;
 
   if (score <= 0) {
     return null;
@@ -391,7 +403,9 @@ function buildRecommendation(outgoingPokemon, incomingPokemon, baselineMetrics, 
   }
 
   return {
+    baseScore,
     score,
+    averageStatGain,
     outgoingPokemon,
     incomingPokemon,
     reason: buildRecommendationReason(reasonParts),
@@ -437,6 +451,10 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
         return right.score - left.score;
       }
 
+      if (left.averageStatGain !== right.averageStatGain) {
+        return right.averageStatGain - left.averageStatGain;
+      }
+
       if (left.incomingPokemon.name !== right.incomingPokemon.name) {
         return left.incomingPokemon.name.localeCompare(right.incomingPokemon.name);
       }
@@ -445,7 +463,7 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
     })
     .slice(0, topK)
     .map((entry) => ({
-      score: Math.round(entry.score),
+      score: Math.ceil(entry.score),
       outgoingPokemonName: toDisplayPokemonName(entry.outgoingPokemon.name),
       incomingPokemonName: toDisplayPokemonName(entry.incomingPokemon.name),
       incomingPokemonId: entry.incomingPokemon.id,
