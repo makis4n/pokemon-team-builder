@@ -6,7 +6,10 @@ import {
   buildRoleBreakdown,
   buildRoleByPokemonId,
 } from '../features/team-analysis/roleAnalysis'
-import { computeWeightedTypeSummary } from '../features/team-analysis/typeAnalysis'
+import {
+  computeWeightedTypeSummary,
+  generateDefensiveInsights,
+} from '../features/team-analysis/typeAnalysis'
 
 const RADAR_STAT_ORDER = ['hp', 'attack', 'defense', 'special-attack', 'special-defense', 'speed']
 
@@ -24,6 +27,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
   )
 
   const typeSummary = useMemo(() => computeWeightedTypeSummary(team), [team])
+  const defensiveInsights = useMemo(() => generateDefensiveInsights(team), [team])
 
   const averageStats = useMemo(() => {
     const totals = RADAR_STAT_ORDER.reduce((accumulator, statName) => {
@@ -66,7 +70,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
     return values
   }, [averageStats])
 
-  const roleRadarValues = useMemo(() => roleBreakdown.averageScores, [roleBreakdown.averageScores])
+  const roleRadarValues = useMemo(() => roleBreakdown.blendedScores, [roleBreakdown.blendedScores])
 
   const activeRadarConfig = useMemo(() => {
     if (radarMode === 'roles') {
@@ -78,7 +82,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
         axisLabels: ROLE_NAMES,
         values: roleRadarValues,
         fixedMinValue: 0,
-        fixedMaxValue: undefined,
+        fixedMaxValue: 0.5,
       }
     }
 
@@ -213,6 +217,19 @@ function TeamAnalysisPage({ team, teamLimit }) {
                   <span><i className="legend-swatch resist025" aria-hidden="true" />0.25x resist</span>
                   <span><i className="legend-swatch immune" aria-hidden="true" />immune (0x)</span>
                 </div>
+
+                {defensiveInsights.length > 0 && (
+                  <section className="defensive-insights-wrap" aria-label="Defensive insights">
+                    <h3>Defensive Insights</h3>
+                    <ul className="defensive-insights-list">
+                      {defensiveInsights.map((insight) => (
+                        <li className="defensive-insight-warning" key={`defensive-insight-${insight.key}`}>
+                          {insight.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
               </section>
             </>
           )}

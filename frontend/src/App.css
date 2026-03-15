@@ -512,9 +512,8 @@
 }
 
 .type-summary-legend {
-  margin-top: 0.45rem;
-  padding-top: 0.35rem;
-  border-top: 1px dashed #9d9d9d;
+  margin-top: 0.2rem;
+  padding-top: 0.1rem;
   display: flex;
   flex-wrap: nowrap;
   gap: 0.7rem;
@@ -527,6 +526,36 @@
   align-items: center;
   gap: 0.28rem;
   white-space: nowrap;
+}
+
+.defensive-insights-wrap {
+  margin-top: 0.5rem;
+  border-top: 1px dashed #9d9d9d;
+  padding-top: 0.4rem;
+}
+
+.defensive-insights-wrap h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.56rem;
+  text-transform: uppercase;
+}
+
+.defensive-insights-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.24rem;
+  font-size: 0.52rem;
+  color: #1f1f1f;
+}
+
+.defensive-insight-warning {
+  border: 1px solid #8a0f0f;
+  background: #ffe2e2;
+  color: #6f1010;
+  padding: 0.22rem 0.3rem;
+  line-height: 1.35;
 }
 
 .role-insights-wrap {
