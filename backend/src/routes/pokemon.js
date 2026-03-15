@@ -1,8 +1,38 @@
 const express = require('express');
 const { listPokemon, getPokemonByNameOrId, listDefensiveCandidates } = require('../services/pokeapi');
-const { getPriorityWeakTypes, recommendDefensiveSwaps } = require('../services/defensiveRecommendations');
+const {
+  getPriorityWeakTypes,
+  computeWeightedTypeSummary,
+  generateDefensiveInsights,
+  recommendDefensiveSwaps,
+} = require('../services/defensiveRecommendations');
 
 const pokemonRouter = express.Router();
+const DEFENSIVE_ANALYSIS_CACHE_TTL_MS = 3 * 60 * 1000;
+const DEFENSIVE_SWAPS_CACHE_TTL_MS = 3 * 60 * 1000;
+const defensiveAnalysisCache = new Map();
+const defensiveSwapsCache = new Map();
+
+function readRouteCache(cache, key) {
+  const entry = cache.get(key);
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+
+  return entry.payload;
+}
+
+function writeRouteCache(cache, key, payload, ttlMs) {
+  cache.set(key, {
+    payload,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
 
 pokemonRouter.get('/', async (req, res, next) => {
   try {
@@ -57,6 +87,19 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
       return;
     }
 
+    const teamSignature = team
+      .map((pokemon) => Number(pokemon?.id))
+      .filter((id) => Number.isFinite(id))
+      .sort((left, right) => left - right)
+      .join(',');
+    const cacheKey = `${teamSignature}|k=${topK}|limit=${candidateLimit}|scan=${scanLimit}`;
+
+    const cachedResponse = readRouteCache(defensiveSwapsCache, cacheKey);
+    if (cachedResponse) {
+      res.status(200).json({ data: cachedResponse });
+      return;
+    }
+
     const weakTypes = getPriorityWeakTypes(team);
     const excludeIds = team
       .map((pokemon) => Number(pokemon?.id))
@@ -74,6 +117,41 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
       maxCandidates: candidateLimit,
     });
 
+    writeRouteCache(defensiveSwapsCache, cacheKey, data, DEFENSIVE_SWAPS_CACHE_TTL_MS);
+
+    res.status(200).json({ data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+pokemonRouter.post('/team-defense-analysis', async (req, res, next) => {
+  try {
+    const team = Array.isArray(req.body?.team) ? req.body.team : [];
+
+    if (team.length === 0) {
+      res.status(200).json({ data: { typeSummary: [], defensiveInsights: [] } });
+      return;
+    }
+
+    const teamSignature = team
+      .map((pokemon) => Number(pokemon?.id))
+      .filter((id) => Number.isFinite(id))
+      .sort((left, right) => left - right)
+      .join(',');
+
+    const cachedResponse = readRouteCache(defensiveAnalysisCache, teamSignature);
+    if (cachedResponse) {
+      res.status(200).json({ data: cachedResponse });
+      return;
+    }
+
+    const data = {
+      typeSummary: computeWeightedTypeSummary(team),
+      defensiveInsights: generateDefensiveInsights(team),
+    };
+
+    writeRouteCache(defensiveAnalysisCache, teamSignature, data, DEFENSIVE_ANALYSIS_CACHE_TTL_MS);
     res.status(200).json({ data });
   } catch (error) {
     next(error);

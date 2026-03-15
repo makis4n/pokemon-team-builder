@@ -1,17 +1,17 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
-import { ROLE_NAMES, statLabels } from '../features/team-analysis/constants'
+import { ROLE_NAMES } from '../features/team-analysis/constants'
 import { buildRadarData } from '../features/team-analysis/radar'
 import {
   buildRoleBreakdown,
   buildRoleByPokemonId,
 } from '../features/team-analysis/roleAnalysis'
-import { fetchDefensiveSwapRecommendations } from '../features/team-builder/api'
+import { fetchDefensiveSwapRecommendations, fetchTeamDefenseAnalysis } from '../features/team-builder/api'
+import { statLabels } from '../features/team-builder/constants'
 import {
   getSwapRecommendationsFromSession,
   saveSwapRecommendationsToSession,
 } from '../features/team-builder/storage'
-import { computeWeightedTypeSummary, generateDefensiveInsights } from '../features/team-analysis/typeAnalysis'
 
 const RADAR_STAT_ORDER = ['hp', 'attack', 'defense', 'special-attack', 'special-defense', 'speed']
 const RECOMMENDATION_CANDIDATE_LIMIT = 90
@@ -29,9 +29,47 @@ function getRecommendationCacheKey(team) {
 
 function TeamAnalysisPage({ team, teamLimit }) {
   const [radarMode, setRadarMode] = useState('stats')
+  const [typeSummary, setTypeSummary] = useState([])
+  const [defensiveInsights, setDefensiveInsights] = useState([])
   const [swapRecommendations, setSwapRecommendations] = useState([])
   const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(false)
   const [recommendationsError, setRecommendationsError] = useState('')
+
+  useEffect(() => {
+    if (team.length === 0) {
+      setTypeSummary([])
+      setDefensiveInsights([])
+      return undefined
+    }
+
+    let isActive = true
+
+    async function loadTeamDefenseAnalysis() {
+      try {
+        const payload = await fetchTeamDefenseAnalysis(team)
+
+        if (!isActive) {
+          return
+        }
+
+        setTypeSummary(payload.data?.typeSummary ?? [])
+        setDefensiveInsights(payload.data?.defensiveInsights ?? [])
+      } catch {
+        if (!isActive) {
+          return
+        }
+
+        setTypeSummary([])
+        setDefensiveInsights([])
+      }
+    }
+
+    loadTeamDefenseAnalysis()
+
+    return () => {
+      isActive = false
+    }
+  }, [team])
 
   useEffect(() => {
     if (team.length === 0) {
@@ -103,9 +141,6 @@ function TeamAnalysisPage({ team, teamLimit }) {
     () => buildRoleByPokemonId(roleBreakdown.assignments),
     [roleBreakdown.assignments],
   )
-
-  const typeSummary = useMemo(() => computeWeightedTypeSummary(team), [team])
-  const defensiveInsights = useMemo(() => generateDefensiveInsights(team), [team])
 
   const averageStats = useMemo(() => {
     const totals = RADAR_STAT_ORDER.reduce((accumulator, statName) => {

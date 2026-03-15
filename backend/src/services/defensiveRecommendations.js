@@ -221,6 +221,111 @@ function buildNewCoverageTypes(baselineMetrics, nextMetrics) {
   });
 }
 
+function buildWeaknessInsight(weaknesses, teamSize) {
+  const candidates = weaknesses
+    .map((entry) => ({
+      ...entry,
+      weakCount: entry.weak2x + entry.weak4x,
+    }))
+    .filter((entry) => entry.weakCount / teamSize >= WEAKNESS_RATIO_THRESHOLD)
+    .sort((left, right) => {
+      if (left.weakCount !== right.weakCount) {
+        return right.weakCount - left.weakCount;
+      }
+
+      if (left.weak4x !== right.weak4x) {
+        return right.weak4x - left.weak4x;
+      }
+
+      return left.type.localeCompare(right.type);
+    });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const topWeakCount = candidates[0].weakCount;
+  const tiedTypes = candidates
+    .filter((entry) => entry.weakCount === topWeakCount)
+    .map((entry) => toDisplayTypeName(entry.type))
+    .sort((left, right) => left.localeCompare(right));
+
+  const formattedTypes =
+    tiedTypes.length === 1
+      ? tiedTypes[0]
+      : tiedTypes.length === 2
+        ? `${tiedTypes[0]} and ${tiedTypes[1]}`
+        : `${tiedTypes.slice(0, -1).join(', ')}, and ${tiedTypes[tiedTypes.length - 1]}`;
+
+  return {
+    key: 'weakness',
+    message: `Weakness: ${topWeakCount}/${teamSize} are weak to ${formattedTypes}.`,
+  };
+}
+
+function buildCoverageInsight(weaknesses) {
+  const uncoveredTypes = weaknesses
+    .filter((entry) => entry.resist05x + entry.resist025x + entry.immune === 0)
+    .map((entry) => toDisplayTypeName(entry.type));
+
+  if (uncoveredTypes.length === 0) {
+    return null;
+  }
+
+  const listedTypes = uncoveredTypes.slice(0, 4).join(', ');
+  const remainingCount = uncoveredTypes.length - 4;
+  const suffix = remainingCount > 0 ? `, +${remainingCount} more` : '';
+
+  return {
+    key: 'coverage',
+    message: `Coverage: No resist or immunity to ${listedTypes}${suffix}.`,
+  };
+}
+
+function buildQuadWeaknessInsight(team) {
+  const entries = [];
+
+  for (const pokemon of team) {
+    const profile = getDefensiveProfile(pokemon.types);
+    const categories = categoriseProfile(profile);
+
+    if (categories.quadWeakness.length === 0) {
+      continue;
+    }
+
+    const weakTypes = categories.quadWeakness.map(toDisplayTypeName).join('/');
+    entries.push(`${toDisplayPokemonName(pokemon.name)} (${weakTypes})`);
+  }
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const listedEntries = entries.slice(0, 3).join(', ');
+  const remainingCount = entries.length - 3;
+  const suffix = remainingCount > 0 ? `, +${remainingCount} more` : '';
+
+  return {
+    key: 'quad-risk',
+    message: `4x Risk: ${listedEntries}${suffix}.`,
+  };
+}
+
+function generateDefensiveInsights(team) {
+  if (team.length === 0) {
+    return [];
+  }
+
+  const weaknesses = analyseTeamWeaknesses(team);
+  const teamSize = team.length;
+
+  return [
+    buildWeaknessInsight(weaknesses, teamSize),
+    buildCoverageInsight(weaknesses),
+    buildQuadWeaknessInsight(team),
+  ].filter(Boolean);
+}
+
 function scoreSwap(baselineMetrics, nextMetrics, improvedTypes, newCoverageTypes) {
   const criticalReduction = baselineMetrics.criticalTypes.length - nextMetrics.criticalTypes.length;
   const uncoveredReduction = baselineMetrics.uncoveredTypes.length - nextMetrics.uncoveredTypes.length;
@@ -349,5 +454,7 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
 
 module.exports = {
   getPriorityWeakTypes,
+  computeWeightedTypeSummary,
+  generateDefensiveInsights,
   recommendDefensiveSwaps,
 };

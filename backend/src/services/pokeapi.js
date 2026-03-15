@@ -1,22 +1,40 @@
 const POKEAPI_BASE_URL = 'https://pokeapi.co/api/v2';
 const LIST_CACHE_TTL_MS = 10 * 60 * 1000;
 const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+const DEFENSIVE_CANDIDATE_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_SCAN_LIMIT = 240;
 const DETAIL_BATCH_SIZE = 16;
 
 const listCache = new Map();
 const detailCache = new Map();
+const defensiveCandidateCache = new Map();
+const inFlightPokeApiRequests = new Map();
 
 async function fetchFromPokeApi(path) {
-  const response = await fetch(`${POKEAPI_BASE_URL}${path}`);
-
-  if (!response.ok) {
-    const error = new Error(`PokeAPI request failed with status ${response.status}`);
-    error.statusCode = response.status;
-    throw error;
+  const inFlightRequest = inFlightPokeApiRequests.get(path);
+  if (inFlightRequest) {
+    return inFlightRequest;
   }
 
-  return response.json();
+  const requestPromise = (async () => {
+    const response = await fetch(`${POKEAPI_BASE_URL}${path}`);
+
+    if (!response.ok) {
+      const error = new Error(`PokeAPI request failed with status ${response.status}`);
+      error.statusCode = response.status;
+      throw error;
+    }
+
+    return response.json();
+  })();
+
+  inFlightPokeApiRequests.set(path, requestPromise);
+
+  try {
+    return await requestPromise;
+  } finally {
+    inFlightPokeApiRequests.delete(path);
+  }
 }
 
 function readCache(cache, key) {
@@ -69,8 +87,8 @@ function normalizePokemonDetail(pokemon) {
 
 async function listPokemon({ search, limit = 20, offset = 0 }) {
   if (search) {
-    const pokemon = await fetchFromPokeApi(`/pokemon/${encodeURIComponent(search.toLowerCase())}`);
-    return [normalizePokemonDetail(pokemon)];
+    const pokemon = await getPokemonByNameOrId(search.toLowerCase());
+    return [pokemon];
   }
 
   const cacheKey = `${limit}:${offset}`;
@@ -195,7 +213,19 @@ const TYPE_CHART = {
 async function listDefensiveCandidates({ weakTypes = [], excludeIds = [], limit = 90, scanLimit = DEFAULT_SCAN_LIMIT }) {
   const cappedScanLimit = Math.min(Math.max(Number(scanLimit) || DEFAULT_SCAN_LIMIT, 40), 400);
   const cappedLimit = Math.min(Math.max(Number(limit) || 90, 1), 120);
-  const idsToExclude = new Set((excludeIds || []).map((value) => Number(value)).filter(Boolean));
+  const sortedWeakTypes = [...(weakTypes || [])].map((type) => String(type).toLowerCase()).sort((a, b) => a.localeCompare(b));
+  const sortedExcludeIds = [...(excludeIds || [])]
+    .map((value) => Number(value))
+    .filter(Boolean)
+    .sort((left, right) => left - right);
+
+  const cacheKey = `weak=${sortedWeakTypes.join(',')}|exclude=${sortedExcludeIds.join(',')}|limit=${cappedLimit}|scan=${cappedScanLimit}`;
+  const cachedCandidates = readCache(defensiveCandidateCache, cacheKey);
+  if (cachedCandidates) {
+    return cachedCandidates;
+  }
+
+  const idsToExclude = new Set(sortedExcludeIds);
 
   const summaries = await listPokemon({ limit: cappedScanLimit, offset: 0 });
   const candidateIds = summaries
@@ -214,7 +244,7 @@ async function listDefensiveCandidates({ weakTypes = [], excludeIds = [], limit 
       }
 
       const detail = result.value;
-      const defensiveFitScore = getDefensiveFitScore(detail, weakTypes);
+      const defensiveFitScore = getDefensiveFitScore(detail, sortedWeakTypes);
       candidates.push({
         ...detail,
         defensiveFitScore,
@@ -222,7 +252,7 @@ async function listDefensiveCandidates({ weakTypes = [], excludeIds = [], limit 
     }
   }
 
-  return candidates
+  const result = candidates
     .sort((left, right) => {
       if (left.defensiveFitScore !== right.defensiveFitScore) {
         return right.defensiveFitScore - left.defensiveFitScore;
@@ -231,6 +261,9 @@ async function listDefensiveCandidates({ weakTypes = [], excludeIds = [], limit 
       return left.name.localeCompare(right.name);
     })
     .slice(0, cappedLimit);
+
+  writeCache(defensiveCandidateCache, cacheKey, result, DEFENSIVE_CANDIDATE_CACHE_TTL_MS);
+  return result;
 }
 
 module.exports = {
