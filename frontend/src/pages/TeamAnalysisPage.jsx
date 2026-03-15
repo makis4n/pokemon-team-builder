@@ -1,20 +1,98 @@
 import { Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ROLE_NAMES, statLabels } from '../features/team-analysis/constants'
 import { buildRadarData } from '../features/team-analysis/radar'
 import {
   buildRoleBreakdown,
   buildRoleByPokemonId,
 } from '../features/team-analysis/roleAnalysis'
+import { fetchDefensiveSwapRecommendations } from '../features/team-builder/api'
 import {
-  computeWeightedTypeSummary,
-  generateDefensiveInsights,
-} from '../features/team-analysis/typeAnalysis'
+  getSwapRecommendationsFromSession,
+  saveSwapRecommendationsToSession,
+} from '../features/team-builder/storage'
+import { computeWeightedTypeSummary, generateDefensiveInsights } from '../features/team-analysis/typeAnalysis'
 
 const RADAR_STAT_ORDER = ['hp', 'attack', 'defense', 'special-attack', 'special-defense', 'speed']
+const RECOMMENDATION_CANDIDATE_LIMIT = 90
+const RECOMMENDATION_SOURCE_MAX_SCAN = 240
+
+function getRecommendationCacheKey(team) {
+  const teamIdSignature = team
+    .map((pokemon) => pokemon.id)
+    .filter(Boolean)
+    .sort((left, right) => left - right)
+    .join(',')
+
+  return `${teamIdSignature}::swap-v1`
+}
 
 function TeamAnalysisPage({ team, teamLimit }) {
   const [radarMode, setRadarMode] = useState('stats')
+  const [swapRecommendations, setSwapRecommendations] = useState([])
+  const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(false)
+  const [recommendationsError, setRecommendationsError] = useState('')
+
+  useEffect(() => {
+    if (team.length === 0) {
+      setSwapRecommendations([])
+      setIsRecommendationsLoading(false)
+      setRecommendationsError('')
+      return undefined
+    }
+
+    let isActive = true
+    const recommendationCacheKey = getRecommendationCacheKey(team)
+
+    async function loadSwapRecommendations() {
+      setIsRecommendationsLoading(true)
+      setRecommendationsError('')
+
+      try {
+        const cachedRecommendations = getSwapRecommendationsFromSession(recommendationCacheKey)
+        if (cachedRecommendations.length > 0) {
+          if (!isActive) {
+            return
+          }
+
+          setSwapRecommendations(cachedRecommendations)
+          return
+        }
+
+        const payload = await fetchDefensiveSwapRecommendations({
+          team,
+          topK: 5,
+          candidateLimit: RECOMMENDATION_CANDIDATE_LIMIT,
+          scanLimit: RECOMMENDATION_SOURCE_MAX_SCAN,
+        })
+        const recommendations = payload.data ?? []
+
+        if (!isActive) {
+          return
+        }
+
+        setSwapRecommendations(recommendations)
+        saveSwapRecommendationsToSession(recommendationCacheKey, recommendations)
+      } catch (error) {
+        if (!isActive) {
+          return
+        }
+
+        setRecommendationsError(error.message)
+      } finally {
+        if (isActive) {
+          setIsRecommendationsLoading(false)
+        }
+      }
+    }
+
+    loadSwapRecommendations()
+
+    return () => {
+      isActive = false
+    }
+  }, [team])
+
   const roleBreakdown = useMemo(() => buildRoleBreakdown(team), [team])
   const teamSlots = useMemo(
     () => Array.from({ length: teamLimit }, (_, index) => team[index] ?? null),
@@ -230,6 +308,47 @@ function TeamAnalysisPage({ team, teamLimit }) {
                     </ul>
                   </section>
                 )}
+
+                <section className="swap-recommendations-wrap" aria-label="Defensive swap recommendations">
+                  <h3>Recommended Swaps</h3>
+
+                  {isRecommendationsLoading && (
+                    <p className="swap-recommendations-state">Scanning candidate pool for defensive upgrades...</p>
+                  )}
+
+                  {!isRecommendationsLoading && recommendationsError && (
+                    <p className="swap-recommendations-state error">Could not generate recommendations: {recommendationsError}</p>
+                  )}
+
+                  {!isRecommendationsLoading && !recommendationsError && swapRecommendations.length === 0 && (
+                    <p className="swap-recommendations-state">No positive defensive swap found from the current candidate pool.</p>
+                  )}
+
+                  {!isRecommendationsLoading && !recommendationsError && swapRecommendations.length > 0 && (
+                    <ul className="swap-recommendations-list">
+                      {swapRecommendations.map((recommendation) => (
+                        <li className="swap-recommendation-card" key={`${recommendation.outgoingPokemonName}-${recommendation.incomingPokemonId}`}>
+                          <div className="swap-recommendation-sprite" aria-hidden="true">
+                            {recommendation.incomingPokemonSprite ? (
+                              <img src={recommendation.incomingPokemonSprite} alt="" width="56" height="56" />
+                            ) : (
+                              <span className="swap-recommendation-sprite-fallback" />
+                            )}
+                          </div>
+                          <div className="swap-recommendation-content">
+                            <p className="swap-recommendation-head">
+                              <strong>{recommendation.outgoingPokemonName}</strong>
+                              <span aria-hidden="true">{' -> '}</span>
+                              <strong>{recommendation.incomingPokemonName}</strong>
+                              <em>Score +{recommendation.score}</em>
+                            </p>
+                            <p className="swap-recommendation-reason">{recommendation.reason}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
               </section>
             </>
           )}
