@@ -32,6 +32,20 @@ Backend endpoints used by the frontend:
   - defensive insight warnings
   - recommended defensive swaps
 
+## Example Images
+
+### Team Builder
+
+![Team Builder example](frontend/src/assets/team_builder_example.png)
+
+### Team Analysis
+
+![Team Analysis example](frontend/src/assets/team_analysis_example.png)
+
+### Team Recommendations
+
+![Recommended Swaps example](frontend/src/assets/recommended_swaps_example.png)
+
 ## Rough Calculation Logic
 
 ### Role Calculation (frontend)
