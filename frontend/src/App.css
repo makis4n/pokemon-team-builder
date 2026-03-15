@@ -323,11 +323,210 @@
   align-self: center;
 }
 
+.analysis-nav-button {
+  display: inline-block;
+  margin-top: 0.7rem;
+  text-decoration: none;
+  text-align: center;
+  border: 3px solid var(--ink);
+  background: var(--poke-red);
+  color: #fff;
+  padding: 0.42rem 0.5rem;
+  font-size: 0.62rem;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+}
+
+.analysis-nav-button.disabled {
+  background: #a78383;
+  cursor: not-allowed;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: 2.15fr 1.25fr;
+  gap: 0.9rem;
+}
+
+.analysis-summary-list {
+  margin: 0.35rem 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  border: 2px solid var(--ink);
+}
+
+.analysis-summary-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.28rem 0.4rem;
+  border-bottom: 1px solid #c9c9c9;
+  font-size: 0.56rem;
+}
+
+.analysis-summary-list li:last-child {
+  border-bottom: 0;
+}
+
+.role-radar-wrap {
+  border: 2px solid var(--ink);
+  background: #ffffff;
+  padding: 0.45rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.role-radar-chart {
+  width: 100%;
+  max-width: 420px;
+  display: block;
+  margin: 0 auto 0.45rem;
+  overflow: visible;
+}
+
+.type-summary-wrap {
+  border: 2px solid var(--ink);
+  background: #ffffff;
+  padding: 0.45rem;
+  margin-top: 0.4rem;
+}
+
+.type-summary-wrap h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.type-summary-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.type-summary-list li {
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.53rem;
+}
+
+.summary-type-badge {
+  min-width: 5.2rem;
+  font-size: 0.43rem;
+  letter-spacing: 0;
+  white-space: nowrap;
+  padding: 0.2rem 0.28rem;
+  border-width: 1px;
+  box-shadow:
+    0 0 0 1px var(--ink),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+}
+
+.summary-bar-track {
+  position: relative;
+  width: 100%;
+  max-width: none;
+  height: 0.72rem;
+  border: 2px solid var(--ink);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #e2e2e2,
+    #e2e2e2 2px,
+    #ffffff 2px,
+    #ffffff 5px
+  );
+  overflow: hidden;
+}
+
+.summary-bar-weak4,
+.summary-bar-weak2,
+.summary-bar-resist-light,
+.summary-bar-resist-dark {
+  position: absolute;
+  top: 0;
+  height: 100%;
+}
+
+.summary-bar-weak4 {
+  background: #7e0000;
+}
+
+.summary-bar-weak2 {
+  background: #d34a4a;
+}
+
+.summary-bar-resist-light {
+  background: #39a15d;
+}
+
+.summary-bar-resist-dark {
+  background: #0d4b22;
+}
+
+.radar-ring {
+  fill: none;
+  stroke: #c3c3c3;
+  stroke-width: 1;
+}
+
+.radar-axis {
+  stroke: #9f9f9f;
+  stroke-width: 1;
+}
+
+.radar-shape {
+  fill: rgba(143, 0, 0, 0.25);
+  stroke: #8f0000;
+  stroke-width: 2;
+}
+
+.radar-label {
+  font-size: 7px;
+  fill: #151515;
+  letter-spacing: 0.02em;
+}
+
+.role-count-list {
+  margin-top: 0;
+}
+
+.role-assignment-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 2px solid var(--ink);
+}
+
+.role-assignment-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.28rem 0.4rem;
+  border-bottom: 1px solid #c9c9c9;
+  font-size: 0.56rem;
+  text-transform: capitalize;
+}
+
+.role-assignment-list li:last-child {
+  border-bottom: 0;
+}
+
+.role-assignment-list strong {
+  color: #8f0000;
+  text-transform: none;
+}
+
+.session-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.56rem;
+  color: #474747;
+}
+
 .team-grid {
   display: grid;
   gap: 0.4rem;
-  max-height: 520px;
-  overflow-y: auto;
 }
 
 .team-entry {
@@ -402,6 +601,12 @@
   color: #8f0000;
 }
 
+.team-entry-action-spacer {
+  width: 2rem;
+  min-width: 2rem;
+  align-self: center;
+}
+
 .state-text {
   font-size: 0.62rem;
   border: 2px dashed var(--ink);
@@ -419,12 +624,15 @@
     grid-template-columns: 1fr;
   }
 
+  .analysis-grid {
+    grid-template-columns: 1fr;
+  }
+
   .pixel-panel {
     min-height: auto;
   }
 
-  .pokemon-list,
-  .team-grid {
+  .pokemon-list {
     max-height: 340px;
   }
 
@@ -436,4 +644,17 @@
     grid-column: 1 / -1;
     justify-self: end;
   }
+
+  .type-summary-list li {
+    grid-template-columns: auto;
+    gap: 0.2rem;
+    border: 1px dotted #9d9d9d;
+    padding: 0.22rem;
+  }
+
+  .summary-bar-track {
+    width: 100%;
+    max-width: none;
+  }
+
 }
