@@ -13,15 +13,31 @@ export function getRoleScores(stats) {
   const specialDefense = getStatValue(stats, 'special-defense')
   const speed = getStatValue(stats, 'speed')
 
-  return {
-    'Physical Sweeper': attack / 100 + speed / 100 - defense / 200,
-    'Special Sweeper': specialAttack / 100 + speed / 100 - specialDefense / 200,
-    'Physical Wall': defense / 100 + hp / 100 - speed / 200,
-    'Special Wall': specialDefense / 100 + hp / 100 - speed / 200,
-    Tank: hp / 100 + defense / 200 + specialDefense / 200,
-    Wallbreaker: attack / 100 + specialAttack / 100 - speed / 200,
-    'Fast Support': speed / 100 - attack / 200 - specialAttack / 200,
+  const bulkAverage = (hp + defense + specialDefense) / 3
+  const offensePeak = Math.max(attack, specialAttack)
+  const offenseAverage = (attack + specialAttack) / 2
+  const offenseGap = Math.abs(attack - specialAttack)
+
+  const rawScores = {
+    'Physical Sweeper':
+      (attack * 0.62 + speed * 0.58 - specialAttack * 0.22 - bulkAverage * 0.18) / 100,
+    'Special Sweeper':
+      (specialAttack * 0.62 + speed * 0.58 - attack * 0.22 - bulkAverage * 0.18) / 100,
+    'Physical Wall':
+      (hp * 0.5 + defense * 0.62 + specialDefense * 0.18 - speed * 0.22 - offenseAverage * 0.15) / 100,
+    'Special Wall':
+      (hp * 0.5 + specialDefense * 0.62 + defense * 0.18 - speed * 0.22 - offenseAverage * 0.15) / 100,
+    Tank:
+      (hp * 0.42 + defense * 0.3 + specialDefense * 0.3 + offensePeak * 0.12 - speed * 0.16) / 100,
+    Wallbreaker:
+      (offensePeak * 0.62 + offenseAverage * 0.28 + offenseGap * 0.18 - speed * 0.38 - bulkAverage * 0.14) / 100,
+    'Fast Support':
+      (speed * 0.62 + bulkAverage * 0.26 - offensePeak * 0.28 + Math.min(defense, specialDefense) * 0.08) / 100,
   }
+
+  return Object.fromEntries(
+    Object.entries(rawScores).map(([role, score]) => [role, Math.max(0, score)]),
+  )
 }
 
 export function classifyPokemonRole(pokemon) {

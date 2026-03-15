@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { ROLE_NAMES, statLabels } from '../features/team-analysis/constants'
 import { buildRadarData } from '../features/team-analysis/radar'
 import {
@@ -8,7 +8,10 @@ import {
 } from '../features/team-analysis/roleAnalysis'
 import { computeWeightedTypeSummary } from '../features/team-analysis/typeAnalysis'
 
+const RADAR_STAT_ORDER = ['hp', 'attack', 'defense', 'special-attack', 'special-defense', 'speed']
+
 function TeamAnalysisPage({ team, teamLimit }) {
+  const [radarMode, setRadarMode] = useState('stats')
   const roleBreakdown = useMemo(() => buildRoleBreakdown(team), [team])
   const teamSlots = useMemo(
     () => Array.from({ length: teamLimit }, (_, index) => team[index] ?? null),
@@ -22,9 +25,82 @@ function TeamAnalysisPage({ team, teamLimit }) {
 
   const typeSummary = useMemo(() => computeWeightedTypeSummary(team), [team])
 
+  const averageStats = useMemo(() => {
+    const totals = RADAR_STAT_ORDER.reduce((accumulator, statName) => {
+      accumulator[statName] = 0
+      return accumulator
+    }, {})
+
+    if (team.length === 0) {
+      return totals
+    }
+
+    for (const pokemon of team) {
+      for (const stat of pokemon.stats) {
+        if (stat.name in totals) {
+          totals[stat.name] += stat.baseStat
+        }
+      }
+    }
+
+    for (const statName of RADAR_STAT_ORDER) {
+      totals[statName] /= team.length
+    }
+
+    return totals
+  }, [team])
+
+  const radarAxisLabels = useMemo(
+    () => RADAR_STAT_ORDER.map((statName) => statLabels[statName] ?? statName),
+    [],
+  )
+
+  const radarValues = useMemo(() => {
+    const values = {}
+
+    for (const statName of RADAR_STAT_ORDER) {
+      const label = statLabels[statName] ?? statName
+      values[label] = averageStats[statName]
+    }
+
+    return values
+  }, [averageStats])
+
+  const roleRadarValues = useMemo(() => roleBreakdown.averageScores, [roleBreakdown.averageScores])
+
+  const activeRadarConfig = useMemo(() => {
+    if (radarMode === 'roles') {
+      return {
+        title: 'Role Radar',
+        emptyMessage: 'Add Pokemon to generate a team role profile.',
+        sectionAria: 'Team role radar chart',
+        chartAria: 'Pokemon team role distribution radar chart',
+        axisLabels: ROLE_NAMES,
+        values: roleRadarValues,
+        fixedMinValue: 0,
+        fixedMaxValue: undefined,
+      }
+    }
+
+    return {
+      title: 'Stat Radar',
+      emptyMessage: 'Add Pokemon to generate a team stat profile.',
+      sectionAria: 'Team base stat radar chart',
+      chartAria: 'Pokemon team base stat distribution radar chart',
+      axisLabels: radarAxisLabels,
+      values: radarValues,
+      fixedMinValue: 55,
+      fixedMaxValue: 115,
+    }
+  }, [radarAxisLabels, radarMode, radarValues, roleRadarValues])
+
   const radarData = useMemo(
-    () => buildRadarData(roleBreakdown.averageScores, ROLE_NAMES),
-    [roleBreakdown.averageScores],
+    () =>
+      buildRadarData(activeRadarConfig.values, activeRadarConfig.axisLabels, {
+        fixedMinValue: activeRadarConfig.fixedMinValue,
+        fixedMaxValue: activeRadarConfig.fixedMaxValue,
+      }),
+    [activeRadarConfig],
   )
 
   return (
@@ -35,19 +111,39 @@ function TeamAnalysisPage({ team, teamLimit }) {
 
       <section className="analysis-grid">
         <section className="pixel-panel">
-          <h2>Role Radar</h2>
-          {team.length === 0 && <p className="state-text">Add Pokemon to generate role classification.</p>}
+          <div className="radar-header">
+            <h2>{activeRadarConfig.title}</h2>
+            <div className="radar-toggle" role="group" aria-label="Radar mode toggle">
+              <button
+                type="button"
+                className={`radar-toggle-button${radarMode === 'stats' ? ' active' : ''}`}
+                onClick={() => setRadarMode('stats')}
+                aria-pressed={radarMode === 'stats'}
+              >
+                Stats
+              </button>
+              <button
+                type="button"
+                className={`radar-toggle-button${radarMode === 'roles' ? ' active' : ''}`}
+                onClick={() => setRadarMode('roles')}
+                aria-pressed={radarMode === 'roles'}
+              >
+                Roles
+              </button>
+            </div>
+          </div>
+          {team.length === 0 && <p className="state-text">{activeRadarConfig.emptyMessage}</p>}
           {team.length > 0 && (
             <>
-              <section className="role-radar-wrap" aria-label="Team role radar chart">
-                <svg viewBox="0 14 240 212" className="role-radar-chart" role="img" aria-label="Pokemon team role distribution radar chart">
+              <section className="role-radar-wrap" aria-label={activeRadarConfig.sectionAria}>
+                <svg viewBox="0 14 240 212" className="role-radar-chart" role="img" aria-label={activeRadarConfig.chartAria}>
                   {radarData.rings.map((ringPoints, index) => (
                     <polygon key={`ring-${index}`} points={ringPoints} className="radar-ring" />
                   ))}
 
                   {radarData.axes.map((axis) => (
                     <line
-                      key={`axis-${axis.role}`}
+                      key={`axis-${axis.axisName}`}
                       x1={radarData.centerX}
                       y1={radarData.centerY}
                       x2={axis.end.x}
@@ -60,7 +156,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
 
                   {radarData.axes.map((axis) => (
                     <text
-                      key={`label-${axis.role}`}
+                      key={`label-${axis.axisName}`}
                       x={axis.label.x + axis.placement.dx}
                       y={axis.label.y + axis.placement.dy}
                       textAnchor={axis.placement.textAnchor}
@@ -69,7 +165,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
                     >
                       {axis.labelLines.map((line, lineIndex) => (
                         <tspan
-                          key={`${axis.role}-${lineIndex}`}
+                          key={`${axis.axisName}-${lineIndex}`}
                           x={axis.label.x + axis.placement.dx}
                           dy={lineIndex === 0 ? 0 : '1.05em'}
                         >

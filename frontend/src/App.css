@@ -375,6 +375,47 @@
   margin: 0.18rem 0 0.45rem;
 }
 
+.radar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.radar-header h2 {
+  margin: 0;
+}
+
+.radar-toggle {
+  display: inline-flex;
+  border: 2px solid var(--ink);
+  background: #ffffff;
+}
+
+.radar-toggle-button {
+  border: 0;
+  border-right: 2px solid var(--ink);
+  background: #f5f0ea;
+  color: var(--ink);
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 0.42rem;
+  padding: 0.24rem 0.36rem;
+  cursor: pointer;
+}
+
+.radar-toggle-button:last-child {
+  border-right: 0;
+}
+
+.radar-toggle-button.active {
+  background: #fbbe4f;
+}
+
+.radar-toggle-button:focus-visible {
+  outline: 2px solid #1b72ff;
+  outline-offset: 1px;
+}
+
 .role-radar-chart {
   width: 100%;
   max-width: 380px;
