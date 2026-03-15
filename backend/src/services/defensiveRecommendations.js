@@ -367,20 +367,22 @@ function buildRecommendation(outgoingPokemon, incomingPokemon, baselineMetrics, 
   const reasonParts = [];
 
   if (criticalReduction > 0) {
-    reasonParts.push(`Severe weak: ${baselineMetrics.criticalTypes.length} -> ${nextMetrics.criticalTypes.length}`);
-  }
-
-  if (uncoveredReduction > 0) {
-    reasonParts.push(`Coverage gaps: ${baselineMetrics.uncoveredTypes.length} -> ${nextMetrics.uncoveredTypes.length}`);
+    reasonParts.push(`Severe weaknesses: ${baselineMetrics.criticalTypes.length} -> ${nextMetrics.criticalTypes.length}`);
   }
 
   if (quadReduction > 0) {
     reasonParts.push(`4x risk: ${baselineMetrics.quadRiskCount} -> ${nextMetrics.quadRiskCount}`);
   }
 
-  if (newCoverageTypes.length > 0) {
-    const coveredTypes = newCoverageTypes.slice(0, 3).map(toDisplayTypeName).join(', ');
-    reasonParts.push(`Adds cover: ${coveredTypes}`);
+  if (uncoveredReduction > 0 || newCoverageTypes.length > 0) {
+    const coverageBase = `Coverage gaps: ${baselineMetrics.uncoveredTypes.length} -> ${nextMetrics.uncoveredTypes.length}`;
+
+    if (newCoverageTypes.length > 0) {
+      const coveredTypes = newCoverageTypes.slice(0, 3).map(toDisplayTypeName).join(', ');
+      reasonParts.push(`${coverageBase} (adds ${coveredTypes} coverage)`);
+    } else {
+      reasonParts.push(coverageBase);
+    }
   }
 
   if (improvedTypes.length > 0) {

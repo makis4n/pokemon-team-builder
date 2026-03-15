@@ -10,6 +10,61 @@ function AnalysisOverviewPanel({
   isRecommendationsLoading,
   recommendationsError,
 }) {
+  function splitReasonParts(reason) {
+    if (!reason) {
+      return []
+    }
+
+    const parts = reason
+      .split('|')
+      .map((part) => part.trim())
+      .filter(Boolean)
+
+    const coverageGapPart = parts.find((part) => part.toLowerCase().startsWith('coverage gaps'))
+    const addsCoverPart = parts.find((part) => part.toLowerCase().startsWith('adds cover'))
+    const mergedCoveragePart = [coverageGapPart, addsCoverPart].filter(Boolean).join(' | ')
+
+    const normalizedParts = []
+
+    for (const part of parts) {
+      const normalizedPart = part.toLowerCase()
+
+      if (normalizedPart.startsWith('coverage gaps') || normalizedPart.startsWith('adds cover')) {
+        continue
+      }
+
+      normalizedParts.push(part)
+    }
+
+    if (mergedCoveragePart) {
+      normalizedParts.push(mergedCoveragePart)
+    }
+
+    return normalizedParts
+  }
+
+  function getReasonTone(part) {
+    const normalizedPart = part.toLowerCase()
+
+    if (normalizedPart.startsWith('severe weak')) {
+      return 'severe'
+    }
+
+    if (normalizedPart.startsWith('coverage gaps')) {
+      return 'coverage-gaps'
+    }
+
+    if (normalizedPart.startsWith('adds cover')) {
+      return 'adds-cover'
+    }
+
+    if (normalizedPart.startsWith('pressure relief')) {
+      return 'pressure-relief'
+    }
+
+    return 'default'
+  }
+
   return (
     <section className="pixel-panel">
       <div className="radar-header">
@@ -151,7 +206,7 @@ function AnalysisOverviewPanel({
                     <li className="swap-recommendation-card" key={`${recommendation.outgoingPokemonName}-${recommendation.incomingPokemonId}`}>
                       <div className="swap-recommendation-sprite" aria-hidden="true">
                         {recommendation.incomingPokemonSprite ? (
-                          <img src={recommendation.incomingPokemonSprite} alt="" width="56" height="56" />
+                          <img src={recommendation.incomingPokemonSprite} alt="" className="swap-recommendation-sprite-image" />
                         ) : (
                           <span className="swap-recommendation-sprite-fallback" />
                         )}
@@ -163,7 +218,16 @@ function AnalysisOverviewPanel({
                           <strong>{recommendation.incomingPokemonName}</strong>
                           <em>Score +{recommendation.score}</em>
                         </p>
-                        <p className="swap-recommendation-reason">{recommendation.reason}</p>
+                        <div className="swap-recommendation-reason-tags" aria-label="Recommendation summary">
+                          {splitReasonParts(recommendation.reason).map((part) => (
+                            <span
+                              key={`${recommendation.incomingPokemonId}-${part}`}
+                              className={`swap-reason-tag ${getReasonTone(part)}`}
+                            >
+                              {part}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </li>
                   ))}

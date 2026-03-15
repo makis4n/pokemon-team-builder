@@ -141,6 +141,23 @@
   margin-bottom: 0.4rem;
 }
 
+.pokemon-card-sprite {
+  width: 96px;
+  height: 96px;
+  border: 2px solid var(--ink);
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.08);
+}
+
+.pokemon-card-sprite-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 .pokemon-card h3,
 .team-card h3 {
   margin: 0;
@@ -615,6 +632,13 @@
   display: block;
 }
 
+.swap-recommendation-sprite-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 .swap-recommendation-sprite-fallback {
   width: 22px;
   height: 22px;
@@ -644,11 +668,46 @@
   font-size: 0.56rem;
 }
 
-.swap-recommendation-reason {
-  margin: 0.22rem 0 0;
-  font-size: 0.56rem;
-  line-height: 1.4;
-  color: #2a2a2a;
+.swap-recommendation-reason-tags {
+  margin: 0.24rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.24rem;
+}
+
+.swap-reason-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #1f6b32;
+  background: #ddf3e2;
+  color: #154823;
+  font-size: 0.5rem;
+  line-height: 1.3;
+  padding: 0.2rem 0.28rem;
+}
+
+.swap-reason-tag.severe {
+  background: #e6f7e8;
+  border-color: #2d7a3f;
+  color: #1f5a2f;
+}
+
+.swap-reason-tag.coverage-gaps {
+  background: #dff3dc;
+  border-color: #2f7d35;
+  color: #1f5a2b;
+}
+
+.swap-reason-tag.adds-cover {
+  background: #d4efdc;
+  border-color: #216a33;
+  color: #144726;
+}
+
+.swap-reason-tag.pressure-relief {
+  background: #e1f4e6;
+  border-color: #2a7a3a;
+  color: #1a5328;
 }
 
 .role-insights-wrap {
@@ -842,6 +901,13 @@
   background: #ffffff;
   display: grid;
   place-items: center;
+}
+
+.team-entry-sprite-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
 }
 
 .team-entry-sprite.placeholder {

@@ -24,12 +24,13 @@ function PokemonInfoPanel({
       {selectedPokemon && !isDetailLoading && (
         <article className="pokemon-card">
           <div className="pokemon-card-head">
-            <img
-              src={selectedPokemon.sprite}
-              alt={selectedPokemon.name}
-              width="96"
-              height="96"
-            />
+            <div className="pokemon-card-sprite">
+              <img
+                src={selectedPokemon.sprite}
+                alt={selectedPokemon.name}
+                className="pokemon-card-sprite-image"
+              />
+            </div>
             <div>
               <h3>{selectedPokemon.name}</h3>
               <p>#{String(selectedPokemon.id).padStart(3, '0')}</p>

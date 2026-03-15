@@ -10,7 +10,7 @@ function AnalysisCurrentTeamPanel({ team, teamLimit, teamSlots, roleByPokemonId 
           pokemon ? (
             <li key={pokemon.id} className="team-entry">
               <div className="team-entry-sprite">
-                <img src={pokemon.sprite} alt={pokemon.name} width="56" height="56" />
+                <img src={pokemon.sprite} alt={pokemon.name} className="team-entry-sprite-image" />
               </div>
               <div className="team-entry-details">
                 <div className="team-entry-head">
