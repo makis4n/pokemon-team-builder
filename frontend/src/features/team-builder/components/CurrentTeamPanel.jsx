@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-function CurrentTeamPanel({ team, teamLimit, statLabels, onRemoveFromTeam }) {
+function CurrentTeamPanel({ team, teamLimit, statLabels, onRemoveFromTeam, canOpenTeamDetails }) {
   const teamSlots = Array.from({ length: teamLimit }, (_, index) => team[index] ?? null)
 
   return (
@@ -59,17 +59,35 @@ function CurrentTeamPanel({ team, teamLimit, statLabels, onRemoveFromTeam }) {
         ))}
       </ul>
 
-      <Link
-        to="/analysis"
-        className={`analysis-nav-button ${team.length === 0 ? 'disabled' : ''}`}
-        onClick={(event) => {
-          if (team.length === 0) {
-            event.preventDefault()
-          }
-        }}
-      >
-        Analyse Team
-      </Link>
+      <div className="team-detail-nav-row">
+        <Link
+          to="/analysis"
+          className={`analysis-nav-button ${team.length === 0 ? 'disabled' : ''}`}
+          onClick={(event) => {
+            if (team.length === 0) {
+              event.preventDefault()
+            }
+          }}
+        >
+          Analyse Team
+        </Link>
+
+        <Link
+          to="/team-detail"
+          className={`analysis-nav-button ${team.length === 0 || !canOpenTeamDetails ? 'disabled' : ''}`}
+          onClick={(event) => {
+            if (team.length === 0 || !canOpenTeamDetails) {
+              event.preventDefault()
+            }
+          }}
+        >
+          Team Details
+        </Link>
+      </div>
+
+      {!canOpenTeamDetails && (
+        <p className="team-filter-alert">Select a filter to view team details.</p>
+      )}
     </section>
   )
 }

@@ -187,6 +187,7 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
           teamLimit={teamLimit}
           statLabels={statLabels}
           onRemoveFromTeam={onRemovePokemonFromTeam}
+          canOpenTeamDetails={selectedGameFilterKey !== DEFAULT_GAME_FILTER_KEY}
         />
       </section>
     </main>

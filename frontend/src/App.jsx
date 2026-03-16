@@ -5,6 +5,7 @@ import { TEAM_LIMIT } from './features/team-builder/constants'
 import { getSafeTeamFromSession, saveTeamToSession } from './features/team-builder/storage'
 import TeamAnalysisPage from './pages/TeamAnalysisPage'
 import TeamBuilderPage from './pages/TeamBuilderPage'
+import TeamDetailPage from './pages/TeamDetailPage'
 
 function App() {
   const [team, setTeam] = useState(() => getSafeTeamFromSession())
@@ -56,6 +57,16 @@ function App() {
         path="/analysis"
         element={
           <TeamAnalysisPage
+            team={team}
+            teamLimit={TEAM_LIMIT}
+          />
+        }
+      />
+
+      <Route
+        path="/team-detail"
+        element={
+          <TeamDetailPage
             team={team}
             teamLimit={TEAM_LIMIT}
           />

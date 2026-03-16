@@ -262,6 +262,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
           teamLimit={teamLimit}
           teamSlots={teamSlots}
           roleByPokemonId={roleByPokemonId}
+          canOpenTeamDetails={selectedGameFilterKey !== DEFAULT_GAME_FILTER_KEY}
         />
       </section>
     </main>

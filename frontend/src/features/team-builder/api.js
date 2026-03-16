@@ -113,6 +113,14 @@ export function fetchPokemonDetail(nameOrId) {
   return fetchJson(`/api/pokemon/${encodeURIComponent(nameOrId)}`)
 }
 
+export function fetchPokemonTeamDetail(nameOrId, gameFilterKey = 'all') {
+  const cacheKey = `team-detail:${String(nameOrId).toLowerCase()}:${gameFilterKey}`
+  return fetchJson(`/api/pokemon/${encodeURIComponent(nameOrId)}/team-detail?gameFilterKey=${encodeURIComponent(gameFilterKey)}`, {}, {
+    enabled: true,
+    cacheKey,
+  })
+}
+
 export function fetchDefensiveSwapRecommendations({
   team,
   teamSizeTarget = 6,

@@ -1,5 +1,5 @@
 const express = require('express');
-const { listPokemon, getPokemonByNameOrId, listDefensiveCandidates } = require('../services/pokeapi');
+const { listPokemon, getPokemonByNameOrId, getPokemonTeamDetail, listDefensiveCandidates } = require('../services/pokeapi');
 const {
   getPriorityWeakTypes,
   computeWeightedTypeSummary,
@@ -231,6 +231,16 @@ pokemonRouter.post('/team-defense-analysis', async (req, res, next) => {
     };
 
     writeRouteCache(defensiveAnalysisCache, teamSignature, data, DEFENSIVE_ANALYSIS_CACHE_TTL_MS);
+    res.status(200).json({ data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+pokemonRouter.get('/:nameOrId/team-detail', async (req, res, next) => {
+  try {
+    const gameFilterKey = String(req.query.gameFilterKey || 'all');
+    const data = await getPokemonTeamDetail(req.params.nameOrId, { gameFilterKey });
     res.status(200).json({ data });
   } catch (error) {
     next(error);

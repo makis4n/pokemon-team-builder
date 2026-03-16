@@ -5,6 +5,7 @@ const DEFENSIVE_CANDIDATE_CACHE_TTL_MS = 5 * 60 * 1000;
 const SPECIES_CACHE_TTL_MS = 30 * 60 * 1000;
 const EVOLUTION_CHAIN_CACHE_TTL_MS = 30 * 60 * 1000;
 const GENERATION_SUMMARY_CACHE_TTL_MS = 30 * 60 * 1000;
+const TEAM_DETAIL_CACHE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_SCAN_LIMIT = 240;
 const DETAIL_BATCH_SIZE = 16;
 
@@ -14,7 +15,34 @@ const defensiveCandidateCache = new Map();
 const speciesCache = new Map();
 const evolutionChainCache = new Map();
 const generationSummaryCache = new Map();
+const teamDetailCache = new Map();
 const inFlightPokeApiRequests = new Map();
+
+const GAME_FILTER_VERSION_GROUPS = {
+  all: null,
+  'gen1-rby-yellow': new Set(['red-blue', 'yellow']),
+  'gen2-gsc': new Set(['gold-silver', 'crystal']),
+  'gen3-rse-frlg': new Set(['ruby-sapphire', 'emerald', 'firered-leafgreen']),
+  'gen4-dppt-hgss': new Set(['diamond-pearl', 'platinum', 'heartgold-soulsilver']),
+  'gen5-bw-b2w2': new Set(['black-white', 'black-2-white-2']),
+  'gen6-xy-oras': new Set(['x-y', 'omega-ruby-alpha-sapphire']),
+  'gen7-sm-usum-lgpe': new Set(['sun-moon', 'ultra-sun-ultra-moon', 'lets-go-pikachu-lets-go-eevee']),
+  'gen8-swsh-bdsp-la': new Set(['sword-shield', 'brilliant-diamond-and-shining-pearl', 'legends-arceus']),
+  'gen9-sv': new Set(['scarlet-violet']),
+};
+
+const GAME_FILTER_VERSIONS = {
+  all: null,
+  'gen1-rby-yellow': new Set(['red', 'blue', 'yellow']),
+  'gen2-gsc': new Set(['gold', 'silver', 'crystal']),
+  'gen3-rse-frlg': new Set(['ruby', 'sapphire', 'emerald', 'firered', 'leafgreen']),
+  'gen4-dppt-hgss': new Set(['diamond', 'pearl', 'platinum', 'heartgold', 'soulsilver']),
+  'gen5-bw-b2w2': new Set(['black', 'white', 'black-2', 'white-2']),
+  'gen6-xy-oras': new Set(['x', 'y', 'omega-ruby', 'alpha-sapphire']),
+  'gen7-sm-usum-lgpe': new Set(['sun', 'moon', 'ultra-sun', 'ultra-moon', 'lets-go-pikachu', 'lets-go-eevee']),
+  'gen8-swsh-bdsp-la': new Set(['sword', 'shield', 'brilliant-diamond', 'shining-pearl', 'legends-arceus']),
+  'gen9-sv': new Set(['scarlet', 'violet']),
+};
 
 async function fetchFromPokeApi(path) {
   const inFlightRequest = inFlightPokeApiRequests.get(path);
@@ -101,6 +129,244 @@ function extractIdFromUrl(url) {
 
   const match = String(url).match(/\/(\d+)\/?$/);
   return match ? Number(match[1]) : null;
+}
+
+function toDisplayName(value) {
+  return String(value || '')
+    .split('-')
+    .map((chunk) => (chunk ? chunk[0].toUpperCase() + chunk.slice(1) : chunk))
+    .join(' ');
+}
+
+function getGameFilterScope(gameFilterKey) {
+  const key = GAME_FILTER_VERSION_GROUPS[gameFilterKey] ? gameFilterKey : 'all';
+  return {
+    versionGroups: GAME_FILTER_VERSION_GROUPS[key],
+    versions: GAME_FILTER_VERSIONS[key],
+  };
+}
+
+function formatEvolutionCondition(detail) {
+  if (!detail) {
+    return 'Unknown condition';
+  }
+
+  const fragments = [];
+  const trigger = detail.trigger?.name;
+
+  if (trigger === 'level-up') {
+    if (detail.min_level) {
+      fragments.push(`Level ${detail.min_level}+`);
+    } else {
+      fragments.push('Level up');
+    }
+  } else if (trigger === 'use-item' && detail.item?.name) {
+    fragments.push(`Use ${toDisplayName(detail.item.name)}`);
+  } else if (trigger === 'trade') {
+    if (detail.trade_species?.name) {
+      fragments.push(`Trade for ${toDisplayName(detail.trade_species.name)}`);
+    } else {
+      fragments.push('Trade');
+    }
+  } else if (trigger) {
+    fragments.push(toDisplayName(trigger));
+  }
+
+  if (detail.time_of_day) {
+    fragments.push(`(${detail.time_of_day})`);
+  }
+  if (detail.held_item?.name) {
+    fragments.push(`holding ${toDisplayName(detail.held_item.name)}`);
+  }
+  if (detail.known_move?.name) {
+    fragments.push(`knows ${toDisplayName(detail.known_move.name)}`);
+  }
+  if (detail.location?.name) {
+    fragments.push(`at ${toDisplayName(detail.location.name)}`);
+  }
+  if (detail.min_happiness) {
+    fragments.push(`happiness ${detail.min_happiness}+`);
+  }
+  if (detail.min_affection) {
+    fragments.push(`affection ${detail.min_affection}+`);
+  }
+  if (detail.min_beauty) {
+    fragments.push(`beauty ${detail.min_beauty}+`);
+  }
+
+  if (!fragments.length) {
+    return 'Unknown condition';
+  }
+
+  return fragments.join(' ');
+}
+
+function buildEvolutionEntries(chainNode, targetSpeciesId, parentNode = null, collector = { from: null, to: [] }) {
+  if (!chainNode) {
+    return collector;
+  }
+
+  const currentSpeciesId = extractIdFromUrl(chainNode.species?.url);
+  if (currentSpeciesId === targetSpeciesId) {
+    if (parentNode) {
+      const fromDetail = (chainNode.evolution_details || [])[0] || null;
+      collector.from = {
+        speciesName: toDisplayName(parentNode.species?.name),
+        condition: formatEvolutionCondition(fromDetail),
+      };
+    }
+
+    collector.to = (chainNode.evolves_to || []).map((childNode) => ({
+      speciesName: toDisplayName(childNode.species?.name),
+      condition: formatEvolutionCondition((childNode.evolution_details || [])[0] || null),
+    }));
+
+    return collector;
+  }
+
+  for (const childNode of chainNode.evolves_to || []) {
+    buildEvolutionEntries(childNode, targetSpeciesId, chainNode, collector);
+    if (collector.from || collector.to.length > 0) {
+      return collector;
+    }
+  }
+
+  return collector;
+}
+
+function buildLevelUpMoves(pokemonPayload, versionGroupScope) {
+  const bestByMove = new Map();
+
+  for (const moveEntry of pokemonPayload?.moves || []) {
+    const moveName = toDisplayName(moveEntry.move?.name);
+    if (!moveName) {
+      continue;
+    }
+
+    for (const detail of moveEntry.version_group_details || []) {
+      if (detail.move_learn_method?.name !== 'level-up') {
+        continue;
+      }
+
+      const versionGroupName = detail.version_group?.name;
+      if (versionGroupScope && !versionGroupScope.has(versionGroupName)) {
+        continue;
+      }
+
+      const level = Number(detail.level_learned_at || 0);
+      const existing = bestByMove.get(moveName);
+
+      if (!existing || level < existing.level) {
+        bestByMove.set(moveName, {
+          moveName,
+          level,
+          versionGroupName: toDisplayName(versionGroupName),
+        });
+      }
+    }
+  }
+
+  return Array.from(bestByMove.values())
+    .sort((left, right) => {
+      if (left.level !== right.level) {
+        return left.level - right.level;
+      }
+      return left.moveName.localeCompare(right.moveName);
+    });
+}
+
+function buildEncounterLocations(encountersPayload, versionScope) {
+  const byLocation = new Map();
+
+  for (const encounterEntry of encountersPayload || []) {
+    const locationName = toDisplayName(encounterEntry.location_area?.name);
+    if (!locationName) {
+      continue;
+    }
+
+    const versionDetails = (encounterEntry.version_details || []).filter((entry) => {
+      if (!versionScope) {
+        return true;
+      }
+      return versionScope.has(entry.version?.name);
+    });
+
+    if (!versionDetails.length) {
+      continue;
+    }
+
+    const methods = new Set();
+    const versions = new Set();
+
+    for (const versionDetail of versionDetails) {
+      versions.add(toDisplayName(versionDetail.version?.name));
+
+      for (const encounterDetail of versionDetail.encounter_details || []) {
+        methods.add(toDisplayName(encounterDetail.method?.name));
+      }
+    }
+
+    const existing = byLocation.get(locationName) || {
+      locationName,
+      methods: new Set(),
+      versions: new Set(),
+    };
+
+    for (const method of methods) {
+      existing.methods.add(method);
+    }
+    for (const version of versions) {
+      existing.versions.add(version);
+    }
+
+    byLocation.set(locationName, existing);
+  }
+
+  return Array.from(byLocation.values())
+    .map((entry) => ({
+      locationName: entry.locationName,
+      methods: Array.from(entry.methods).sort((a, b) => a.localeCompare(b)),
+      versions: Array.from(entry.versions).sort((a, b) => a.localeCompare(b)),
+    }))
+    .sort((left, right) => left.locationName.localeCompare(right.locationName));
+}
+
+async function getPokemonTeamDetail(nameOrId, options = {}) {
+  const gameFilterKey = options.gameFilterKey || 'all';
+  const cacheKey = `${String(nameOrId).toLowerCase()}|detail|${gameFilterKey}`;
+  const cached = readCache(teamDetailCache, cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
+  const pokemonDetail = await getPokemonByNameOrId(nameOrId);
+  const species = pokemonDetail.speciesId ? await getSpeciesData(pokemonDetail.speciesId) : null;
+  const evolutionLineId = extractIdFromUrl(species?.evolution_chain?.url);
+
+  const scope = getGameFilterScope(gameFilterKey);
+  const [pokemonPayload, encountersPayload, chainPayload] = await Promise.all([
+    fetchFromPokeApi(`/pokemon/${encodeURIComponent(pokemonDetail.id)}`),
+    fetchFromPokeApi(`/pokemon/${encodeURIComponent(pokemonDetail.id)}/encounters`),
+    evolutionLineId
+      ? fetchFromPokeApi(`/evolution-chain/${encodeURIComponent(evolutionLineId)}`)
+      : Promise.resolve(null),
+  ]);
+
+  const evolutionEntries = buildEvolutionEntries(chainPayload?.chain, pokemonDetail.speciesId);
+
+  const payload = {
+    pokemon: pokemonDetail,
+    evolution: {
+      from: evolutionEntries.from,
+      to: evolutionEntries.to,
+    },
+    levelUpMoves: buildLevelUpMoves(pokemonPayload, scope.versionGroups),
+    encounters: buildEncounterLocations(encountersPayload, scope.versions),
+  };
+
+  writeCache(teamDetailCache, cacheKey, payload, TEAM_DETAIL_CACHE_TTL_MS);
+  return payload;
 }
 
 function walkEvolutionChain(node, stage, stageBySpeciesId) {
@@ -441,6 +707,7 @@ async function listDefensiveCandidates({
 module.exports = {
   listPokemon,
   getPokemonByNameOrId,
+  getPokemonTeamDetail,
   listDefensiveCandidates,
   TYPE_CHART,
 };

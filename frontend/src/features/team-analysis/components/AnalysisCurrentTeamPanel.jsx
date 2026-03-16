@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { statLabels } from '../../team-builder/constants'
 
-function AnalysisCurrentTeamPanel({ team, teamLimit, teamSlots, roleByPokemonId }) {
+function AnalysisCurrentTeamPanel({ team, teamLimit, teamSlots, roleByPokemonId, canOpenTeamDetails }) {
   return (
     <section className="pixel-panel">
       <h2>Current Team ({team.length}/{teamLimit})</h2>
@@ -50,7 +50,24 @@ function AnalysisCurrentTeamPanel({ team, teamLimit, teamSlots, roleByPokemonId 
         ))}
       </ul>
 
-      <Link to="/" className="analysis-nav-button">Team Builder</Link>
+      <div className="team-detail-nav-row">
+        <Link to="/" className="analysis-nav-button">Team Builder</Link>
+        <Link
+          to="/team-detail"
+          className={`analysis-nav-button ${team.length === 0 || !canOpenTeamDetails ? 'disabled' : ''}`}
+          onClick={(event) => {
+            if (team.length === 0 || !canOpenTeamDetails) {
+              event.preventDefault()
+            }
+          }}
+        >
+          Team Details
+        </Link>
+      </div>
+
+      {!canOpenTeamDetails && (
+        <p className="team-filter-alert">Select a filter to view team details.</p>
+      )}
     </section>
   )
 }

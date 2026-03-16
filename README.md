@@ -32,6 +32,11 @@ Backend endpoints used by the frontend:
   - type weakness summary bars
   - defensive insight warnings
   - recommended defensive swaps
+- Team Detail page with:
+  - click a Pokemon in Current Team (right panel)
+  - see evolution conditions
+  - see level-up move learn levels
+  - see encounter locations for selected game filter
 
 ## Game Filter Behavior
 
@@ -49,6 +54,21 @@ How it affects recommendations:
 
 1. Defensive swap recommendations are generated only from the selected generation when a filter is active.
 2. If your current team contains Pokemon outside the selected generation, recommendations are blocked and an error is shown until the team/filter is fixed.
+
+## Team Detail Page
+
+The Team Detail page is designed to give you a breakdown of specific Pokemon on your current team.
+
+How it works:
+
+1. The first Pokemon is auto-selected when the page opens.
+2. Clicking a team member loads detailed information on the left:
+
+- evolution conditions
+- level-up moves and learn levels
+- encounter locations
+
+3. Move and encounter data are scoped to your selected game filter.
 
 ## Example Images
 
