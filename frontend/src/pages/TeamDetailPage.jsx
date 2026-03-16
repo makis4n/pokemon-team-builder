@@ -10,6 +10,8 @@ import TeamDetailCurrentTeamPanel from '../features/team-detail/components/TeamD
 
 function TeamDetailPage({ team, teamLimit }) {
   const [selectedPokemonId, setSelectedPokemonId] = useState(null)
+  const [activePokemonQuery, setActivePokemonQuery] = useState(null)
+  const [navigationStack, setNavigationStack] = useState([])
   const [detailData, setDetailData] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
@@ -30,8 +32,19 @@ function TeamDetailPage({ team, teamLimit }) {
 
     if (!selectedPokemonId || !team.some((pokemon) => pokemon.id === selectedPokemonId)) {
       setSelectedPokemonId(team[0].id)
+      setActivePokemonQuery(team[0].id)
+      setNavigationStack([])
     }
   }, [selectedPokemonId, team])
+
+  useEffect(() => {
+    if (!selectedPokemonId) {
+      return
+    }
+
+    setActivePokemonQuery(selectedPokemonId)
+    setNavigationStack([])
+  }, [selectedPokemonId])
 
   useEffect(() => {
     if (!isFilterSelected) {
@@ -41,12 +54,7 @@ function TeamDetailPage({ team, teamLimit }) {
       return
     }
 
-    if (!selectedPokemonId) {
-      return
-    }
-
-    const selectedPokemon = team.find((pokemon) => pokemon.id === selectedPokemonId)
-    if (!selectedPokemon) {
+    if (!activePokemonQuery) {
       return
     }
 
@@ -57,7 +65,7 @@ function TeamDetailPage({ team, teamLimit }) {
       setDetailError('')
 
       try {
-        const payload = await fetchPokemonTeamDetail(selectedPokemon.id, selectedGameFilterKey)
+        const payload = await fetchPokemonTeamDetail(activePokemonQuery, selectedGameFilterKey)
 
         if (!isActive) {
           return
@@ -83,12 +91,38 @@ function TeamDetailPage({ team, teamLimit }) {
     return () => {
       isActive = false
     }
-  }, [isFilterSelected, selectedGameFilterKey, selectedPokemonId, team])
+  }, [activePokemonQuery, isFilterSelected, selectedGameFilterKey, team])
 
   const selectedPokemon = useMemo(
     () => team.find((pokemon) => pokemon.id === selectedPokemonId) ?? null,
     [selectedPokemonId, team],
   )
+
+  const displayedPokemon = useMemo(
+    () => detailData?.pokemon ?? selectedPokemon,
+    [detailData, selectedPokemon],
+  )
+
+  function handleInspectPokemon(nextPokemonIdOrName) {
+    if (!nextPokemonIdOrName || !isFilterSelected) {
+      return
+    }
+
+    setNavigationStack((current) => [...current, activePokemonQuery])
+    setActivePokemonQuery(nextPokemonIdOrName)
+  }
+
+  function handleGoBack() {
+    setNavigationStack((current) => {
+      if (!current.length) {
+        return current
+      }
+
+      const previousQuery = current[current.length - 1]
+      setActivePokemonQuery(previousQuery)
+      return current.slice(0, -1)
+    })
+  }
 
   return (
     <main className="app-shell">
@@ -100,10 +134,13 @@ function TeamDetailPage({ team, teamLimit }) {
       <section className="analysis-grid team-detail-grid">
         <TeamPokemonDetailPanel
           isFilterSelected={isFilterSelected}
-          selectedPokemon={selectedPokemon}
+          selectedPokemon={displayedPokemon}
           detailData={detailData}
           isLoading={isLoading}
           error={detailError}
+          canGoBack={navigationStack.length > 0}
+          onGoBack={handleGoBack}
+          onInspectPokemon={handleInspectPokemon}
         />
 
         <TeamDetailCurrentTeamPanel

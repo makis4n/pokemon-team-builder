@@ -6,6 +6,8 @@ const SPECIES_CACHE_TTL_MS = 30 * 60 * 1000;
 const EVOLUTION_CHAIN_CACHE_TTL_MS = 30 * 60 * 1000;
 const GENERATION_SUMMARY_CACHE_TTL_MS = 30 * 60 * 1000;
 const TEAM_DETAIL_CACHE_TTL_MS = 15 * 60 * 1000;
+const MOVE_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+const ABILITY_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_SCAN_LIMIT = 240;
 const DETAIL_BATCH_SIZE = 16;
 
@@ -16,6 +18,8 @@ const speciesCache = new Map();
 const evolutionChainCache = new Map();
 const generationSummaryCache = new Map();
 const teamDetailCache = new Map();
+const moveTypeCache = new Map();
+const abilityDetailCache = new Map();
 const inFlightPokeApiRequests = new Map();
 
 const GAME_FILTER_VERSION_GROUPS = {
@@ -146,6 +150,22 @@ function getGameFilterScope(gameFilterKey) {
   };
 }
 
+function getPokedexDescription(speciesPayload) {
+  const englishEntry = (speciesPayload?.flavor_text_entries || []).find(
+    (entry) => entry?.language?.name === 'en' && entry?.flavor_text,
+  );
+
+  if (!englishEntry?.flavor_text) {
+    return null;
+  }
+
+  return String(englishEntry.flavor_text)
+    .replace(/\f/g, ' ')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function formatEvolutionCondition(detail) {
   if (!detail) {
     return 'Unknown condition';
@@ -211,12 +231,14 @@ function buildEvolutionEntries(chainNode, targetSpeciesId, parentNode = null, co
     if (parentNode) {
       const fromDetail = (chainNode.evolution_details || [])[0] || null;
       collector.from = {
+        speciesId: extractIdFromUrl(parentNode.species?.url),
         speciesName: toDisplayName(parentNode.species?.name),
         condition: formatEvolutionCondition(fromDetail),
       };
     }
 
     collector.to = (chainNode.evolves_to || []).map((childNode) => ({
+      speciesId: extractIdFromUrl(childNode.species?.url),
       speciesName: toDisplayName(childNode.species?.name),
       condition: formatEvolutionCondition((childNode.evolution_details || [])[0] || null),
     }));
@@ -234,11 +256,143 @@ function buildEvolutionEntries(chainNode, targetSpeciesId, parentNode = null, co
   return collector;
 }
 
-function buildLevelUpMoves(pokemonPayload, versionGroupScope) {
+function getMoveEffectText(movePayload) {
+  const englishEntry = (movePayload?.effect_entries || []).find(
+    (entry) => entry?.language?.name === 'en',
+  );
+
+  const rawEffectText = englishEntry?.short_effect || englishEntry?.effect || null;
+  if (!rawEffectText) {
+    return null;
+  }
+
+  const effectChance = movePayload?.effect_chance;
+  return String(rawEffectText)
+    .replace(/\$effect_chance/g, effectChance == null ? '' : String(effectChance))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getMoveFlavorText(movePayload) {
+  const englishEntry = (movePayload?.flavor_text_entries || []).find(
+    (entry) => entry?.language?.name === 'en' && entry?.flavor_text,
+  );
+
+  if (!englishEntry?.flavor_text) {
+    return null;
+  }
+
+  return String(englishEntry.flavor_text)
+    .replace(/\f/g, ' ')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getAbilityEffectText(abilityPayload) {
+  const englishEntry = (abilityPayload?.effect_entries || []).find(
+    (entry) => entry?.language?.name === 'en' && entry?.short_effect,
+  ) || (abilityPayload?.effect_entries || []).find(
+    (entry) => entry?.language?.name === 'en' && entry?.effect,
+  );
+
+  const rawEffect = englishEntry?.short_effect || englishEntry?.effect || null;
+  if (!rawEffect) {
+    return null;
+  }
+
+  return String(rawEffect)
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function getAbilityDetail(abilityName) {
+  if (!abilityName) {
+    return {
+      name: null,
+      effectText: null,
+    };
+  }
+
+  const cacheKey = String(abilityName).toLowerCase();
+  const cachedDetail = readCache(abilityDetailCache, cacheKey);
+  if (cachedDetail) {
+    return cachedDetail;
+  }
+
+  try {
+    const abilityPayload = await fetchFromPokeApi(`/ability/${encodeURIComponent(cacheKey)}`);
+    const abilityDetail = {
+      name: abilityPayload?.name || cacheKey,
+      effectText: getAbilityEffectText(abilityPayload),
+    };
+
+    writeCache(abilityDetailCache, cacheKey, abilityDetail, ABILITY_DETAIL_CACHE_TTL_MS);
+    return abilityDetail;
+  } catch {
+    return {
+      name: cacheKey,
+      effectText: null,
+    };
+  }
+}
+
+async function getMoveDetail(moveName) {
+  if (!moveName) {
+    return {
+      moveType: null,
+      category: null,
+      basePower: null,
+      accuracy: null,
+      pp: null,
+      effectText: null,
+      flavorText: null,
+    };
+  }
+
+  const cacheKey = String(moveName).toLowerCase();
+  const cachedDetail = readCache(moveTypeCache, cacheKey);
+  if (cachedDetail) {
+    return cachedDetail;
+  }
+
+  try {
+    const movePayload = await fetchFromPokeApi(`/move/${encodeURIComponent(cacheKey)}`);
+    const moveDetail = {
+      moveType: movePayload?.type?.name || null,
+      category: toDisplayName(movePayload?.damage_class?.name || ''),
+      basePower: Number.isFinite(movePayload?.power) ? movePayload.power : null,
+      accuracy: Number.isFinite(movePayload?.accuracy) ? movePayload.accuracy : null,
+      pp: Number.isFinite(movePayload?.pp) ? movePayload.pp : null,
+      effectText: getMoveEffectText(movePayload),
+      flavorText: getMoveFlavorText(movePayload),
+    };
+
+    if (moveDetail.moveType || moveDetail.effectText || moveDetail.flavorText) {
+      writeCache(moveTypeCache, cacheKey, moveDetail, MOVE_DETAIL_CACHE_TTL_MS);
+    }
+
+    return moveDetail;
+  } catch {
+    return {
+      moveType: null,
+      category: null,
+      basePower: null,
+      accuracy: null,
+      pp: null,
+      effectText: null,
+      flavorText: null,
+    };
+  }
+}
+
+async function buildLevelUpMoves(pokemonPayload, versionGroupScope) {
   const bestByMove = new Map();
 
   for (const moveEntry of pokemonPayload?.moves || []) {
-    const moveName = toDisplayName(moveEntry.move?.name);
+    const moveRawName = moveEntry.move?.name;
+    const moveName = toDisplayName(moveRawName);
     if (!moveName) {
       continue;
     }
@@ -258,6 +412,7 @@ function buildLevelUpMoves(pokemonPayload, versionGroupScope) {
 
       if (!existing || level < existing.level) {
         bestByMove.set(moveName, {
+          moveRawName,
           moveName,
           level,
           versionGroupName: toDisplayName(versionGroupName),
@@ -266,7 +421,40 @@ function buildLevelUpMoves(pokemonPayload, versionGroupScope) {
     }
   }
 
-  return Array.from(bestByMove.values())
+  const moveEntries = Array.from(bestByMove.values());
+  const moveDetailLookups = await Promise.allSettled(
+    moveEntries.map((entry) => getMoveDetail(entry.moveRawName)),
+  );
+
+  const withTypes = moveEntries.map((entry, index) => {
+    const lookup = moveDetailLookups[index];
+    const moveDetail = lookup?.status === 'fulfilled'
+      ? lookup.value
+      : {
+        moveType: null,
+        category: null,
+        basePower: null,
+        accuracy: null,
+        pp: null,
+        effectText: null,
+        flavorText: null,
+      };
+
+    return {
+      moveName: entry.moveName,
+      level: entry.level,
+      versionGroupName: entry.versionGroupName,
+      moveType: moveDetail.moveType,
+      category: moveDetail.category,
+      basePower: moveDetail.basePower,
+      accuracy: moveDetail.accuracy,
+      pp: moveDetail.pp,
+      flavorText: moveDetail.flavorText,
+      effectText: moveDetail.effectText,
+    };
+  });
+
+  return withTypes
     .sort((left, right) => {
       if (left.level !== right.level) {
         return left.level - right.level;
@@ -354,14 +542,31 @@ async function getPokemonTeamDetail(nameOrId, options = {}) {
   ]);
 
   const evolutionEntries = buildEvolutionEntries(chainPayload?.chain, pokemonDetail.speciesId);
+  const abilityDetailResults = await Promise.allSettled(
+    (pokemonDetail.abilities || []).map((abilityName) => getAbilityDetail(abilityName)),
+  );
+
+  const abilityEffectsByName = {};
+  for (let index = 0; index < abilityDetailResults.length; index += 1) {
+    const result = abilityDetailResults[index];
+    const fallbackName = pokemonDetail.abilities?.[index];
+
+    if (result?.status === 'fulfilled' && result.value?.name) {
+      abilityEffectsByName[result.value.name] = result.value.effectText;
+    } else if (fallbackName) {
+      abilityEffectsByName[fallbackName] = null;
+    }
+  }
 
   const payload = {
     pokemon: pokemonDetail,
+    pokedexDescription: getPokedexDescription(species),
+    abilityEffectsByName,
     evolution: {
       from: evolutionEntries.from,
       to: evolutionEntries.to,
     },
-    levelUpMoves: buildLevelUpMoves(pokemonPayload, scope.versionGroups),
+    levelUpMoves: await buildLevelUpMoves(pokemonPayload, scope.versionGroups),
     encounters: buildEncounterLocations(encountersPayload, scope.versions),
   };
 

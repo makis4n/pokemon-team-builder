@@ -223,8 +223,8 @@ function TeamAnalysisPage({ team, teamLimit }) {
       chartAria: 'Pokemon team base stat distribution radar chart',
       axisLabels: radarAxisLabels,
       values: radarValues,
-      fixedMinValue: 55,
-      fixedMaxValue: 115,
+      fixedMinValue: 0,
+      fixedMaxValue: 120,
     }
   }, [radarAxisLabels, radarMode, radarValues, roleRadarValues])
 

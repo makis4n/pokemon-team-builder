@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+
 function PokemonSelectorPanel({
   query,
   onQueryChange,
@@ -10,22 +12,66 @@ function PokemonSelectorPanel({
   filteredPokemon,
   onPokemonSelect,
 }) {
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false)
+  const filterMenuRef = useRef(null)
+
+  const selectedFilterLabel = useMemo(() => {
+    const selectedOption = gameFilterOptions.find((option) => option.key === selectedGameFilterKey)
+    return selectedOption?.label ?? gameFilterOptions[0]?.label ?? 'Select filter'
+  }, [gameFilterOptions, selectedGameFilterKey])
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!filterMenuRef.current?.contains(event.target)) {
+        setIsFilterMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [])
+
+  function handleFilterSelect(nextFilterKey) {
+    onGameFilterChange(nextFilterKey)
+    setIsFilterMenuOpen(false)
+  }
+
   return (
     <section className="pixel-panel">
       <h2>Select Pokemon</h2>
 
       <div className="game-filter-wrap">
-        <label htmlFor="game-filter-select" className="game-filter-label">Game Filter</label>
-        <select
-          id="game-filter-select"
-          className="game-filter-select"
-          value={selectedGameFilterKey}
-          onChange={(event) => onGameFilterChange(event.target.value)}
-        >
-          {gameFilterOptions.map((option) => (
-            <option key={option.key} value={option.key}>{option.label}</option>
-          ))}
-        </select>
+        <span className="game-filter-label">Game Filter</span>
+        <div className="game-filter-menu" ref={filterMenuRef}>
+          <button
+            type="button"
+            className="game-filter-trigger"
+            aria-haspopup="listbox"
+            aria-expanded={isFilterMenuOpen}
+            onClick={() => setIsFilterMenuOpen((value) => !value)}
+          >
+            <span className="game-filter-trigger-label">{selectedFilterLabel}</span>
+            <span className="game-filter-trigger-arrow" aria-hidden="true">▾</span>
+          </button>
+
+          {isFilterMenuOpen && (
+            <ul className="game-filter-options" role="listbox" aria-label="Game filter options">
+              {gameFilterOptions.map((option) => (
+                <li key={option.key} role="option" aria-selected={option.key === selectedGameFilterKey}>
+                  <button
+                    type="button"
+                    className={`game-filter-option ${option.key === selectedGameFilterKey ? 'selected' : ''}`}
+                    onClick={() => handleFilterSelect(option.key)}
+                  >
+                    {option.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       <form className="search-form" onSubmit={onSearchSubmit}>

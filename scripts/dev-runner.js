@@ -4,6 +4,8 @@ const readline = require('node:readline');
 
 const rootDir = path.resolve(__dirname, '..');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const frontendDevArgs = ['run', 'dev', '--prefix', 'frontend'];
+const backendDevArgs = ['run', 'dev', '--prefix', 'backend'];
 
 function createPrefixedLogger(name, colorCode) {
   return (chunk, isError = false) => {
@@ -38,12 +40,75 @@ function spawnDevProcess(name, args, colorCode) {
   return child;
 }
 
-const processes = [
-  spawnDevProcess('frontend', ['run', 'dev', '--prefix', 'frontend'], '31'),
-  spawnDevProcess('backend', ['run', 'dev', '--prefix', 'backend'], '34'),
-];
+const processes = {
+  frontend: spawnDevProcess('frontend', frontendDevArgs, '31'),
+  backend: spawnDevProcess('backend', backendDevArgs, '34'),
+};
 
 let isShuttingDown = false;
+let isRestartingBackend = false;
+
+function waitForProcessExit(child, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    let isSettled = false;
+
+    const onExit = () => {
+      if (isSettled) {
+        return;
+      }
+      isSettled = true;
+      clearTimeout(timeoutId);
+      child.off('exit', onExit);
+      resolve(true);
+    };
+
+    const timeoutId = setTimeout(() => {
+      if (isSettled) {
+        return;
+      }
+      isSettled = true;
+      child.off('exit', onExit);
+      resolve(false);
+    }, timeoutMs);
+
+    child.once('exit', onExit);
+  });
+}
+
+async function restartBackendProcess() {
+  if (isShuttingDown) {
+    return;
+  }
+
+  if (isRestartingBackend) {
+    process.stdout.write('Backend restart is already in progress.\n');
+    return;
+  }
+
+  isRestartingBackend = true;
+  process.stdout.write('\nRestarting backend...\n');
+
+  try {
+    const backend = processes.backend;
+
+    if (backend && backend.exitCode == null && backend.signalCode == null) {
+      backend.kill('SIGINT');
+      const didExit = await waitForProcessExit(backend);
+
+      if (!didExit) {
+        backend.kill('SIGTERM');
+        await waitForProcessExit(backend);
+      }
+    }
+
+    if (!isShuttingDown) {
+      processes.backend = spawnDevProcess('backend', backendDevArgs, '34');
+      process.stdout.write('Backend restarted.\n');
+    }
+  } finally {
+    isRestartingBackend = false;
+  }
+}
 
 function shutdown() {
   if (isShuttingDown) {
@@ -53,14 +118,14 @@ function shutdown() {
 
   process.stdout.write('\nStopping frontend and backend...\n');
 
-  for (const child of processes) {
+  for (const child of Object.values(processes)) {
     if (!child.killed) {
       child.kill('SIGINT');
     }
   }
 
   setTimeout(() => {
-    for (const child of processes) {
+    for (const child of Object.values(processes)) {
       if (!child.killed) {
         child.kill('SIGTERM');
       }
@@ -121,7 +186,7 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-process.stdout.write('Commands: [o] + Enter to open app, [q] + Enter to quit.\n');
+process.stdout.write('Commands: [o] + Enter to open app, [r] + Enter to restart backend, [q] + Enter to quit.\n');
 
 rl.on('line', async (input) => {
   const command = input.trim().toLowerCase();
@@ -137,7 +202,12 @@ rl.on('line', async (input) => {
     return;
   }
 
-  process.stdout.write('Unknown command. Use o to open browser, q to quit.\n');
+  if (command === 'r') {
+    await restartBackendProcess();
+    return;
+  }
+
+  process.stdout.write('Unknown command. Use o to open browser, r to restart backend, q to quit.\n');
 });
 
 process.on('SIGINT', shutdown);

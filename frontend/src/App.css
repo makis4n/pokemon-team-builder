@@ -52,7 +52,7 @@
 .game-filter-wrap {
   margin: 0 0 0.62rem;
   padding: 0.34rem;
-  border: 2px dashed var(--ink);
+  border: 3px solid var(--ink);
   background: #fff7df;
 }
 
@@ -72,6 +72,78 @@
   font-family: var(--pixel-font);
   font-size: 0.58rem;
   padding: 0.28rem 0.34rem;
+}
+
+.game-filter-menu {
+  position: relative;
+}
+
+.game-filter-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  border: 3px solid var(--ink);
+  background: #ffffff;
+  color: #1f1f1f;
+  font-family: var(--pixel-font);
+  font-size: 0.58rem;
+  padding: 0.28rem 0.34rem;
+  cursor: pointer;
+}
+
+.game-filter-trigger-arrow {
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.game-filter-options {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.18rem);
+  left: 0;
+  right: 0;
+  border: 3px solid var(--ink);
+  background: #ffffff;
+  box-shadow: 4px 4px 0 var(--ink);
+  display: block;
+}
+
+.game-filter-options li {
+  margin: 0;
+  padding: 0;
+  background: #efefef;
+}
+
+.game-filter-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 2px solid #d2d2d2;
+  background: #efefef;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 0;
+  color: #1d1d1d;
+  font-family: var(--pixel-font);
+  font-size: 0.54rem;
+  line-height: 1.2;
+  padding: 0.22rem 0.28rem;
+  cursor: pointer;
+}
+
+.game-filter-options li:last-child .game-filter-option {
+  border-bottom: 0;
+}
+
+.game-filter-option:hover,
+.game-filter-option.selected {
+  background: #ffe8d6;
 }
 
 .search-form {
@@ -431,6 +503,337 @@
   color: #5c5c5c;
 }
 
+.team-pokedex-entry {
+  margin: 0.35rem 0 0;
+  max-width: none;
+  font-size: 0.52rem;
+  line-height: 1.5;
+  color: #1f1f1f;
+  border: 2px solid #bcbcbc;
+  background: #efefef;
+  padding: 0.35rem 0.42rem;
+}
+
+.team-detail-hero-card {
+  border-width: 4px;
+  background: #d9d9d9;
+  box-shadow:
+    0 0 0 3px #ffffff inset,
+    4px 4px 0 var(--ink);
+  padding: 0.7rem;
+}
+
+.team-detail-hero-head {
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0;
+}
+
+.team-detail-hero-sprite {
+  width: 118px;
+  height: 118px;
+  border-width: 3px;
+  background: #d3d3d3;
+  box-shadow:
+    inset 0 0 0 2px #ececec,
+    inset 0 -2px 0 rgba(0, 0, 0, 0.08);
+}
+
+.team-detail-hero-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.team-detail-hero-title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.18rem;
+  line-height: 1.1;
+}
+
+.team-detail-hero-prefix {
+  font-size: 0.64rem;
+  letter-spacing: 0;
+  color: #1b1b1b;
+}
+
+.team-detail-hero-id {
+  font-size: 0.82rem;
+  letter-spacing: 0.005rem;
+  color: #1b1b1b;
+  margin-right: 0.48rem;
+}
+
+.team-detail-hero-name {
+  text-transform: uppercase;
+  font-size: 0.82rem;
+  letter-spacing: 0.005rem;
+  color: #111111;
+}
+
+.team-detail-abilities-line {
+  margin: 0.18rem 0 0;
+  font-size: 0.52rem;
+  color: #2a2a2a;
+  line-height: 1.35;
+}
+
+.team-ability-list {
+  margin-top: 0.14rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.16rem;
+}
+
+.team-ability-chip {
+  border: 2px solid var(--ink);
+  background: #efefef;
+  padding: 0.12rem 0.24rem;
+  font-size: 0.48rem;
+  line-height: 1.2;
+  color: #1c1c1c;
+  text-transform: capitalize;
+  position: relative;
+  cursor: help;
+}
+
+.team-ability-chip:focus-visible {
+  outline: 2px solid #1b72ff;
+  outline-offset: 1px;
+}
+
+.team-ability-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.28rem);
+  min-width: 14rem;
+  max-width: 20rem;
+  border: 2px solid var(--ink);
+  background: #efefef;
+  color: #161616;
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 0.28rem 0.34rem;
+  font-size: 0.46rem;
+  line-height: 1.35;
+  text-transform: none;
+  z-index: 20;
+  opacity: 0;
+  transform: translateY(0.15rem);
+  transition: opacity 90ms ease, transform 90ms ease;
+  pointer-events: none;
+}
+
+.team-ability-chip:hover .team-ability-tooltip,
+.team-ability-chip:focus-visible .team-ability-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.team-move-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.team-move-summary-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.team-move-arrow {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 0.24rem solid transparent;
+  border-bottom: 0.24rem solid transparent;
+  border-left: 0.42rem solid #111111;
+  transform-origin: 35% 50%;
+  transition: transform 120ms ease;
+}
+
+.team-move-entry {
+  padding: 0;
+  border: 2px solid var(--ink);
+  background: #efefef;
+}
+
+.team-move-dropdown {
+  margin: 0;
+}
+
+.team-move-list .team-move-entry {
+  padding: 0;
+  border: 2px solid #000000;
+  background: #efefef;
+}
+
+.team-move-dropdown > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.28rem 0.36rem;
+  background: #efefef;
+}
+
+.team-move-dropdown > summary::-webkit-details-marker {
+  display: none;
+}
+
+.team-move-dropdown > summary::marker {
+  content: '';
+}
+
+.team-move-dropdown[open] > summary {
+  border-bottom: 2px solid var(--ink);
+  background: #efefef;
+}
+
+.team-move-dropdown[open] .team-move-arrow {
+  transform: rotate(90deg);
+}
+
+.team-move-expanded {
+  display: grid;
+  gap: 0.26rem;
+  padding: 0.26rem;
+  background: #efefef;
+}
+
+.team-move-panel {
+  border: 2px solid var(--ink);
+  background: #efefef;
+}
+
+.team-move-description-panel {
+  background: #ffffff;
+}
+
+.team-move-panel-title {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.01rem;
+  font-size: 0.46rem;
+  color: #ffffff;
+  background: var(--poke-red);
+  padding: 0.16rem 0.26rem;
+  border-bottom: 2px solid var(--ink);
+}
+
+.team-move-flavor {
+  margin: 0 0 0.5rem;
+  padding: 0.22rem 0.28rem 0.1rem;
+  font-size: 0.5rem;
+  line-height: 1.4;
+  color: #141414;
+  background: #ffffff;
+}
+
+.team-move-meta-list {
+  margin: 0;
+  padding: 0.18rem 0.24rem;
+  list-style: none;
+  display: grid;
+  gap: 0.12rem;
+  font-size: 0.48rem;
+  color: #131313;
+  background: #efefef;
+}
+
+.team-move-meta-list li {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.35rem;
+  border-bottom: 1px solid #a9acb0;
+  padding-bottom: 0.04rem;
+}
+
+.team-move-meta-list li:last-child {
+  border-bottom: 0;
+}
+
+.team-move-meta-list li span {
+  color: #4e4e4e;
+}
+
+.team-move-meta-list li strong {
+  color: #1b1b1b;
+}
+
+.team-move-effect {
+  margin: 0;
+  padding: 0.1rem 0.28rem 0.24rem;
+  font-size: 0.5rem;
+  line-height: 1.4;
+  color: #1d1d1d;
+  background: #ffffff;
+}
+
+.team-move-row .type-badge {
+  width: 5.5rem;
+  height: 1.05rem;
+  font-size: 0.46rem;
+  padding: 0.08rem 0.12rem;
+  border-width: 1px;
+  box-shadow:
+    0 0 0 1px var(--ink),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.team-move-list {
+  background: transparent;
+  padding: 0;
+  gap: 0.12rem;
+}
+
+.team-static-list {
+  background: transparent;
+  padding: 0;
+  gap: 0.12rem;
+}
+
+.team-static-list + .team-static-list {
+  margin-top: 0.14rem;
+}
+
+.team-static-list li {
+  border: 2px solid #000000;
+  background: #efefef;
+  padding: 0.28rem 0.36rem;
+  line-height: 1.25;
+}
+
+.team-static-entry-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.team-static-entry-button:hover {
+  text-decoration: underline;
+}
+
+.team-detail-back-button {
+  margin: 0 0 0.32rem;
+}
+
 .team-detail-line {
   margin: 0 0 0.2rem;
   font-size: 0.52rem;
@@ -714,6 +1117,7 @@
 
 .recommendation-toggle-button {
   margin-top: 0;
+  margin-bottom: 0.35rem;
 }
 
 .swap-recommendations-state {
