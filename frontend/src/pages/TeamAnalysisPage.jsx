@@ -25,7 +25,7 @@ function getRecommendationCacheKey(team) {
     .sort((left, right) => left - right)
     .join(',')
 
-  return `${teamIdSignature}::swap-v1`
+  return `${teamIdSignature}::swap-v2`
 }
 
 function TeamAnalysisPage({ team, teamLimit }) {

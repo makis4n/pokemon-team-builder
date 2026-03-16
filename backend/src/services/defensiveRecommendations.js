@@ -412,6 +412,99 @@ function buildRecommendation(outgoingPokemon, incomingPokemon, baselineMetrics, 
   };
 }
 
+function resolveEvolutionLineKey(candidate) {
+  const evolutionLineId = Number(candidate?.evolutionLineId);
+  if (Number.isFinite(evolutionLineId) && evolutionLineId > 0) {
+    return `line:${evolutionLineId}`;
+  }
+
+  return `pokemon:${candidate?.id ?? 'unknown'}`;
+}
+
+function choosePreferredEvolutionLineCandidate(left, right) {
+  const leftStage = Number(left?.evolutionStage) || 0;
+  const rightStage = Number(right?.evolutionStage) || 0;
+
+  if (leftStage !== rightStage) {
+    return leftStage > rightStage ? left : right;
+  }
+
+  const leftFit = Number(left?.defensiveFitScore) || 0;
+  const rightFit = Number(right?.defensiveFitScore) || 0;
+
+  if (leftFit !== rightFit) {
+    return leftFit > rightFit ? left : right;
+  }
+
+  const leftAverage = getAverageBaseStat(left);
+  const rightAverage = getAverageBaseStat(right);
+
+  if (leftAverage !== rightAverage) {
+    return leftAverage > rightAverage ? left : right;
+  }
+
+  return Number(left?.id) >= Number(right?.id) ? left : right;
+}
+
+function dedupeCandidatesByEvolutionLine(candidates) {
+  const byLine = new Map();
+
+  for (const candidate of candidates) {
+    const lineKey = resolveEvolutionLineKey(candidate);
+    const existing = byLine.get(lineKey);
+
+    if (!existing) {
+      byLine.set(lineKey, candidate);
+      continue;
+    }
+
+    byLine.set(lineKey, choosePreferredEvolutionLineCandidate(existing, candidate));
+  }
+
+  return Array.from(byLine.values());
+}
+
+function selectTopUniqueIncomingRecommendations(sortedRecommendations, topK) {
+  const selectedByIncomingId = new Map();
+  const selectedOrder = [];
+
+  for (const recommendation of sortedRecommendations) {
+    const incomingId = recommendation.incomingPokemon?.id;
+    if (!incomingId) {
+      continue;
+    }
+
+    const existing = selectedByIncomingId.get(incomingId);
+    if (existing) {
+      existing.alternativeOutgoing.push(recommendation.outgoingPokemon);
+      continue;
+    }
+
+    if (selectedOrder.length >= topK) {
+      break;
+    }
+
+    const seed = {
+      ...recommendation,
+      alternativeOutgoing: [recommendation.outgoingPokemon],
+    };
+
+    selectedByIncomingId.set(incomingId, seed);
+    selectedOrder.push(seed);
+  }
+
+  return selectedOrder.map((entry) => {
+    const uniqueOutgoingNames = Array.from(
+      new Set(entry.alternativeOutgoing.map((pokemon) => toDisplayPokemonName(pokemon.name))),
+    ).sort((left, right) => left.localeCompare(right));
+
+    return {
+      ...entry,
+      outgoingPokemonNames: uniqueOutgoingNames,
+    };
+  });
+}
+
 function recommendDefensiveSwaps(team, candidatePool, options = {}) {
   if (team.length === 0 || candidatePool.length === 0) {
     return [];
@@ -422,10 +515,10 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
   const teamIds = new Set(team.map((pokemon) => pokemon.id));
   const baselineMetrics = getTeamMetrics(team);
 
-  const eligibleCandidates = candidatePool
+  const eligibleCandidates = dedupeCandidatesByEvolutionLine(candidatePool
     .filter((candidate) => !teamIds.has(candidate.id))
     .filter((candidate) => Array.isArray(candidate.types) && candidate.types.length > 0)
-    .slice(0, maxCandidates);
+  ).slice(0, maxCandidates);
 
   const recommendations = [];
 
@@ -445,7 +538,7 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
     }
   }
 
-  return recommendations
+  const sortedRecommendations = recommendations
     .sort((left, right) => {
       if (left.score !== right.score) {
         return right.score - left.score;
@@ -460,14 +553,18 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
       }
 
       return left.outgoingPokemon.name.localeCompare(right.outgoingPokemon.name);
-    })
-    .slice(0, topK)
+    });
+
+  const selectedRecommendations = selectTopUniqueIncomingRecommendations(sortedRecommendations, topK);
+
+  return selectedRecommendations
     .map((entry) => ({
       score: Math.ceil(entry.score),
-      outgoingPokemonName: toDisplayPokemonName(entry.outgoingPokemon.name),
+      outgoingPokemonName: entry.outgoingPokemonNames.join(', '),
       incomingPokemonName: toDisplayPokemonName(entry.incomingPokemon.name),
       incomingPokemonId: entry.incomingPokemon.id,
       incomingPokemonSprite: entry.incomingPokemon.sprite,
+      outgoingPokemonNames: entry.outgoingPokemonNames,
       reason: entry.reason,
     }));
 }

@@ -2,12 +2,16 @@ const POKEAPI_BASE_URL = 'https://pokeapi.co/api/v2';
 const LIST_CACHE_TTL_MS = 10 * 60 * 1000;
 const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFENSIVE_CANDIDATE_CACHE_TTL_MS = 5 * 60 * 1000;
+const SPECIES_CACHE_TTL_MS = 30 * 60 * 1000;
+const EVOLUTION_CHAIN_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_SCAN_LIMIT = 240;
 const DETAIL_BATCH_SIZE = 16;
 
 const listCache = new Map();
 const detailCache = new Map();
 const defensiveCandidateCache = new Map();
+const speciesCache = new Map();
+const evolutionChainCache = new Map();
 const inFlightPokeApiRequests = new Map();
 
 async function fetchFromPokeApi(path) {
@@ -70,9 +74,12 @@ function normalizePokemonSummary(pokemonResult) {
 }
 
 function normalizePokemonDetail(pokemon) {
+  const speciesId = extractIdFromUrl(pokemon.species?.url);
+
   return {
     id: pokemon.id,
     name: pokemon.name,
+    speciesId,
     types: pokemon.types
       .map((entry) => entry.type.name)
       .sort((a, b) => a.localeCompare(b)),
@@ -82,6 +89,87 @@ function normalizePokemonDetail(pokemon) {
     })),
     abilities: pokemon.abilities.map((entry) => entry.ability.name),
     sprite: pokemon.sprites.front_default,
+  };
+}
+
+function extractIdFromUrl(url) {
+  if (!url) {
+    return null;
+  }
+
+  const match = String(url).match(/\/(\d+)\/?$/);
+  return match ? Number(match[1]) : null;
+}
+
+function walkEvolutionChain(node, stage, stageBySpeciesId) {
+  if (!node) {
+    return;
+  }
+
+  const speciesId = extractIdFromUrl(node.species?.url);
+  if (speciesId) {
+    const currentStage = stageBySpeciesId.get(speciesId);
+    if (!currentStage || stage > currentStage) {
+      stageBySpeciesId.set(speciesId, stage);
+    }
+  }
+
+  for (const child of node.evolves_to || []) {
+    walkEvolutionChain(child, stage + 1, stageBySpeciesId);
+  }
+}
+
+async function getSpeciesData(speciesId) {
+  const cacheKey = String(speciesId);
+  const cachedSpecies = readCache(speciesCache, cacheKey);
+  if (cachedSpecies) {
+    return cachedSpecies;
+  }
+
+  const species = await fetchFromPokeApi(`/pokemon-species/${encodeURIComponent(speciesId)}`);
+  writeCache(speciesCache, cacheKey, species, SPECIES_CACHE_TTL_MS);
+  return species;
+}
+
+async function getEvolutionStagesByLineId(evolutionLineId) {
+  const cacheKey = String(evolutionLineId);
+  const cachedStages = readCache(evolutionChainCache, cacheKey);
+  if (cachedStages) {
+    return cachedStages;
+  }
+
+  const chainPayload = await fetchFromPokeApi(`/evolution-chain/${encodeURIComponent(evolutionLineId)}`);
+  const stageBySpeciesId = new Map();
+  walkEvolutionChain(chainPayload.chain, 1, stageBySpeciesId);
+
+  writeCache(evolutionChainCache, cacheKey, stageBySpeciesId, EVOLUTION_CHAIN_CACHE_TTL_MS);
+  return stageBySpeciesId;
+}
+
+async function getEvolutionMetaForSpecies(speciesId) {
+  if (!speciesId) {
+    return {
+      evolutionLineId: null,
+      evolutionStage: 0,
+    };
+  }
+
+  const species = await getSpeciesData(speciesId);
+  const evolutionLineId = extractIdFromUrl(species?.evolution_chain?.url);
+
+  if (!evolutionLineId) {
+    return {
+      evolutionLineId: null,
+      evolutionStage: 0,
+    };
+  }
+
+  const stageBySpeciesId = await getEvolutionStagesByLineId(evolutionLineId);
+  const evolutionStage = stageBySpeciesId.get(speciesId) ?? 0;
+
+  return {
+    evolutionLineId,
+    evolutionStage,
   };
 }
 
@@ -237,17 +325,28 @@ async function listDefensiveCandidates({ weakTypes = [], excludeIds = [], limit 
   for (let index = 0; index < candidateIds.length; index += DETAIL_BATCH_SIZE) {
     const batchIds = candidateIds.slice(index, index + DETAIL_BATCH_SIZE);
     const batchDetails = await Promise.allSettled(batchIds.map((pokemonId) => getPokemonByNameOrId(pokemonId)));
+    const fulfilledDetails = batchDetails
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => result.value);
 
-    for (const result of batchDetails) {
-      if (result.status !== 'fulfilled') {
-        continue;
-      }
+    const batchEvolutionMeta = await Promise.allSettled(
+      fulfilledDetails.map((detail) => getEvolutionMetaForSpecies(detail.speciesId)),
+    );
 
-      const detail = result.value;
+    for (let detailIndex = 0; detailIndex < fulfilledDetails.length; detailIndex += 1) {
+      const detail = fulfilledDetails[detailIndex];
+      const evolutionMetaResult = batchEvolutionMeta[detailIndex];
+      const evolutionMeta =
+        evolutionMetaResult?.status === 'fulfilled'
+          ? evolutionMetaResult.value
+          : { evolutionLineId: null, evolutionStage: 0 };
+
       const defensiveFitScore = getDefensiveFitScore(detail, sortedWeakTypes);
       candidates.push({
         ...detail,
         defensiveFitScore,
+        evolutionLineId: evolutionMeta.evolutionLineId,
+        evolutionStage: evolutionMeta.evolutionStage,
       });
     }
   }
