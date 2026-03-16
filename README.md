@@ -256,7 +256,7 @@ Frontend caching includes:
 
 #### 3. Performance Optimisations
 
-Team Details:
+#### a. Team Details:
 
 Technical summary: Uses progressive data hydration (summary-first payload), on-demand move-detail fetches, background prefetch queues, and guarded hover-triggered preloads with deduplication and concurrency limits.
 
@@ -270,7 +270,7 @@ Technical summary: Uses progressive data hydration (summary-first payload), on-d
   - only a small number of preloads run at once
   - duplicate requests are skipped when data is already queued, loading, or cached
 
-Team Builder:
+#### b. Team Builder:
 
 Technical summary: Uses delayed hover/focus prefetch into client cache with cancellation guards, plus stale-while-refresh style rendering to keep prior panel content visible during fetch.
 
@@ -279,7 +279,7 @@ Technical summary: Uses delayed hover/focus prefetch into client cache with canc
 - The previous info card stays visible until the next Pokemon is ready.
 - A loading label shows which Pokemon is currently being fetched.
 
-Backend startup:
+#### c. Backend startup:
 
 Technical summary: Performs startup cache warmup for availability datasets so first-hit filtered queries avoid cold-path lookup cost.
 
@@ -296,13 +296,13 @@ Technical summary: Performs startup cache warmup for availability datasets so fi
 
 Top-level scripts:
 
-- npm run dev
-- npm run dev:frontend
-- npm run dev:backend
-- npm run build
+- `npm run dev`
+- `npm run dev:frontend`
+- `npm run dev:backend`
+- `npm run build`
 
 Frontend scripts:
 
-- npm run lint
-- npm run build
-- npm run preview
+- `npm run lint`
+- `npm run build`
+- `npm run preview`
