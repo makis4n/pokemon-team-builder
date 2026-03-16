@@ -46,7 +46,7 @@ const processes = {
 };
 
 let isShuttingDown = false;
-let isRestartingBackend = false;
+let isRestartingProcesses = false;
 
 function waitForProcessExit(child, timeoutMs = 1500) {
   return new Promise((resolve) => {
@@ -75,38 +75,83 @@ function waitForProcessExit(child, timeoutMs = 1500) {
   });
 }
 
-async function restartBackendProcess() {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function restartDevProcesses() {
   if (isShuttingDown) {
     return;
   }
 
-  if (isRestartingBackend) {
-    process.stdout.write('Backend restart is already in progress.\n');
+  if (isRestartingProcesses) {
+    process.stdout.write('Restart is already in progress.\n');
     return;
   }
 
-  isRestartingBackend = true;
-  process.stdout.write('\nRestarting backend...\n');
+  isRestartingProcesses = true;
+  process.stdout.write('\nRestarting frontend and backend...\n');
 
   try {
+    const frontend = processes.frontend;
     const backend = processes.backend;
+
+    if (frontend && frontend.exitCode == null && frontend.signalCode == null) {
+      frontend.kill('SIGINT');
+    }
 
     if (backend && backend.exitCode == null && backend.signalCode == null) {
       backend.kill('SIGINT');
-      const didExit = await waitForProcessExit(backend);
+    }
 
+    const didFrontendExit = frontend
+      ? await waitForProcessExit(frontend)
+      : true;
+    const didBackendExit = backend
+      ? await waitForProcessExit(backend)
+      : true;
+
+    if (!didFrontendExit && frontend) {
+      frontend.kill('SIGTERM');
+      await waitForProcessExit(frontend);
+    }
+
+    if (!didBackendExit && backend) {
+      backend.kill('SIGTERM');
+      const didExit = await waitForProcessExit(backend);
       if (!didExit) {
-        backend.kill('SIGTERM');
-        await waitForProcessExit(backend);
+        process.stderr.write('Backend did not fully stop before restart.\n');
       }
     }
 
     if (!isShuttingDown) {
+      processes.frontend = spawnDevProcess('frontend', frontendDevArgs, '31');
       processes.backend = spawnDevProcess('backend', backendDevArgs, '34');
-      process.stdout.write('Backend restarted.\n');
+      process.stdout.write('Frontend and backend restarted. Waiting for app readiness...\n');
+
+      const candidates = ['http://localhost:5173', 'http://localhost:5174'];
+      const maxAttempts = 40;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        for (const url of candidates) {
+          // eslint-disable-next-line no-await-in-loop
+          const isActive = await checkFrontendUrl(url);
+          if (isActive) {
+            openUrlInBrowser(url);
+            process.stdout.write(`App is ready at ${url}.\n`);
+            return;
+          }
+        }
+
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(500);
+      }
+
+      process.stderr.write('App did not become ready in time. Use o + Enter to try opening manually.\n');
     }
   } finally {
-    isRestartingBackend = false;
+    isRestartingProcesses = false;
   }
 }
 
@@ -186,7 +231,7 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-process.stdout.write('Commands: [o] + Enter to open app, [r] + Enter to restart backend, [q] + Enter to quit.\n');
+process.stdout.write('Commands: [o] + Enter to open app, [r] + Enter to restart frontend+backend then open app, [q] + Enter to quit.\n');
 
 rl.on('line', async (input) => {
   const command = input.trim().toLowerCase();
@@ -203,11 +248,11 @@ rl.on('line', async (input) => {
   }
 
   if (command === 'r') {
-    await restartBackendProcess();
+    await restartDevProcesses();
     return;
   }
 
-  process.stdout.write('Unknown command. Use o to open browser, r to restart backend, q to quit.\n');
+  process.stdout.write('Unknown command. Use o to open browser, r to restart, q to quit.\n');
 });
 
 process.on('SIGINT', shutdown);

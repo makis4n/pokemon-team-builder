@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchMoveDetail } from '../../team-builder/api'
+
+const MOVE_PREFETCH_HOVER_DELAY_MS = 180
+const MAX_MOVE_PREFETCH_CONCURRENCY = 2
 
 function TeamPokemonDetailPanel({
   isFilterSelected,
@@ -11,6 +14,8 @@ function TeamPokemonDetailPanel({
   canGoBack,
   onGoBack,
   onInspectPokemon,
+  onEvolutionPreviewStart,
+  onEvolutionPreviewCancel,
 }) {
   const filterPromptText = 'Select a filter to view Pokemon details.'
   const isAvailabilityError = String(error || '').toLowerCase().includes('not available in the selected game filter')
@@ -23,11 +28,27 @@ function TeamPokemonDetailPanel({
   const shouldRenderContent = !isFilterSelected || Boolean(detailData) || isLoading || !error
   const [moveDetailByRawName, setMoveDetailByRawName] = useState({})
   const [moveDetailsLoadingByRawName, setMoveDetailsLoadingByRawName] = useState({})
+  const moveHoverTimersRef = useRef(new Map())
+  const moveQueuedPrefetchKeysRef = useRef(new Set())
+  const moveQueuedPrefetchTasksRef = useRef([])
+  const moveInFlightPrefetchKeysRef = useRef(new Set())
+  const moveInFlightPrefetchCountRef = useRef(0)
 
   useEffect(() => {
     setMoveDetailByRawName({})
     setMoveDetailsLoadingByRawName({})
+    moveHoverTimersRef.current.forEach((timerId) => window.clearTimeout(timerId))
+    moveHoverTimersRef.current.clear()
+    moveQueuedPrefetchKeysRef.current.clear()
+    moveQueuedPrefetchTasksRef.current = []
+    moveInFlightPrefetchKeysRef.current.clear()
+    moveInFlightPrefetchCountRef.current = 0
   }, [selectedPokemon?.id, detailData])
+
+  useEffect(() => () => {
+    moveHoverTimersRef.current.forEach((timerId) => window.clearTimeout(timerId))
+    moveHoverTimersRef.current.clear()
+  }, [])
 
   if (!selectedPokemon) {
     return (
@@ -88,6 +109,83 @@ function TeamPokemonDetailPanel({
         [moveRawName]: false,
       }))
     }
+  }
+
+  function pumpMovePrefetchQueue() {
+    while (
+      moveInFlightPrefetchCountRef.current < MAX_MOVE_PREFETCH_CONCURRENCY
+      && moveQueuedPrefetchTasksRef.current.length > 0
+    ) {
+      const nextTask = moveQueuedPrefetchTasksRef.current.shift()
+      if (!nextTask) {
+        return
+      }
+
+      moveInFlightPrefetchCountRef.current += 1
+      moveInFlightPrefetchKeysRef.current.add(nextTask.moveRawName)
+
+      void nextTask.run()
+        .catch(() => {
+          // Ignore move hover prefetch failures; explicit expand handles fallback.
+        })
+        .finally(() => {
+          moveInFlightPrefetchCountRef.current -= 1
+          moveInFlightPrefetchKeysRef.current.delete(nextTask.moveRawName)
+          moveQueuedPrefetchKeysRef.current.delete(nextTask.moveRawName)
+          pumpMovePrefetchQueue()
+        })
+    }
+  }
+
+  function enqueueMovePreviewPrefetch(moveRawName) {
+    if (!moveRawName) {
+      return
+    }
+
+    if (
+      moveDetailByRawName[moveRawName] !== undefined
+      || moveDetailsLoadingByRawName[moveRawName]
+      || moveQueuedPrefetchKeysRef.current.has(moveRawName)
+      || moveInFlightPrefetchKeysRef.current.has(moveRawName)
+    ) {
+      return
+    }
+
+    moveQueuedPrefetchKeysRef.current.add(moveRawName)
+    moveQueuedPrefetchTasksRef.current.push({
+      moveRawName,
+      run: async () => {
+        const payload = await fetchMoveDetail(moveRawName)
+        setMoveDetailByRawName((current) => ({
+          ...current,
+          [moveRawName]: payload?.data ?? null,
+        }))
+      },
+    })
+    pumpMovePrefetchQueue()
+  }
+
+  function handleMovePreviewStart(moveRawName) {
+    if (!moveRawName || moveHoverTimersRef.current.has(moveRawName)) {
+      return
+    }
+
+    const timerId = window.setTimeout(() => {
+      moveHoverTimersRef.current.delete(moveRawName)
+      enqueueMovePreviewPrefetch(moveRawName)
+    }, MOVE_PREFETCH_HOVER_DELAY_MS)
+
+    moveHoverTimersRef.current.set(moveRawName, timerId)
+  }
+
+  function handleMovePreviewCancel(moveRawName) {
+    const timerId = moveHoverTimersRef.current.get(moveRawName)
+    if (!timerId) {
+      return
+    }
+
+    window.clearTimeout(timerId)
+    moveHoverTimersRef.current.delete(moveRawName)
   }
 
   return (
@@ -179,6 +277,10 @@ function TeamPokemonDetailPanel({
                   <button
                     type="button"
                     className="team-static-entry-button"
+                    onMouseEnter={() => onEvolutionPreviewStart?.(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
+                    onMouseLeave={() => onEvolutionPreviewCancel?.(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
+                    onFocus={() => onEvolutionPreviewStart?.(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
+                    onBlur={() => onEvolutionPreviewCancel?.(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
                     onClick={() => onInspectPokemon(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
                   >
                     <strong>Evolves from:</strong> {detailPayload.evolution.from.speciesName} ({detailPayload.evolution.from.condition})
@@ -194,6 +296,10 @@ function TeamPokemonDetailPanel({
                     <button
                       type="button"
                       className="team-static-entry-button"
+                      onMouseEnter={() => onEvolutionPreviewStart?.(entry.speciesId || entry.speciesName)}
+                      onMouseLeave={() => onEvolutionPreviewCancel?.(entry.speciesId || entry.speciesName)}
+                      onFocus={() => onEvolutionPreviewStart?.(entry.speciesId || entry.speciesName)}
+                      onBlur={() => onEvolutionPreviewCancel?.(entry.speciesId || entry.speciesName)}
                       onClick={() => onInspectPokemon(entry.speciesId || entry.speciesName)}
                     >
                       <strong>Evolves to:</strong> {entry.speciesName} ({entry.condition})
@@ -233,6 +339,10 @@ function TeamPokemonDetailPanel({
                     <li key={`${selectedPokemon.id}-move-${move.moveName}`} className="team-move-entry">
                       <details
                         className="team-move-dropdown"
+                        onMouseEnter={() => handleMovePreviewStart(moveRawName)}
+                        onMouseLeave={() => handleMovePreviewCancel(moveRawName)}
+                        onFocus={() => handleMovePreviewStart(moveRawName)}
+                        onBlur={() => handleMovePreviewCancel(moveRawName)}
                         onToggle={(event) => {
                           if (event.currentTarget.open) {
                             void ensureMoveDetailLoaded(move)

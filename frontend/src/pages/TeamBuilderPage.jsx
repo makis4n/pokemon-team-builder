@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchPokemonDetail, fetchPokemonList } from '../features/team-builder/api'
 import {
   DEFAULT_GAME_FILTER_KEY,
@@ -13,6 +13,9 @@ import CurrentTeamPanel from '../features/team-builder/components/CurrentTeamPan
 import PokemonInfoPanel from '../features/team-builder/components/PokemonInfoPanel'
 import PokemonSelectorPanel from '../features/team-builder/components/PokemonSelectorPanel'
 
+const DETAIL_PREFETCH_HOVER_DELAY_MS = 180
+const MAX_DETAIL_PREFETCH_CONCURRENCY = 2
+
 function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonFromTeam }) {
   const [allPokemon, setAllPokemon] = useState([])
   const [selectedGameFilterKey, setSelectedGameFilterKey] = useState(() => getSelectedGameFilterFromSession())
@@ -22,10 +25,39 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [listError, setListError] = useState('')
   const [detailError, setDetailError] = useState('')
+  const [loadingTargetLabel, setLoadingTargetLabel] = useState('')
+  const prefetchedDetailKeysRef = useRef(new Set())
+  const hoverPrefetchTimersRef = useRef(new Map())
+  const queuedPrefetchKeysRef = useRef(new Set())
+  const queuedPrefetchTasksRef = useRef([])
+  const inFlightPrefetchKeysRef = useRef(new Set())
+  const inFlightPrefetchCountRef = useRef(0)
+
+  function toDisplayName(value) {
+    return String(value || '')
+      .split('-')
+      .map((chunk) => (chunk ? chunk[0].toUpperCase() + chunk.slice(1) : chunk))
+      .join(' ')
+  }
 
   useEffect(() => {
     saveSelectedGameFilterToSession(selectedGameFilterKey)
   }, [selectedGameFilterKey])
+
+  useEffect(() => {
+    prefetchedDetailKeysRef.current = new Set()
+    hoverPrefetchTimersRef.current.forEach((timerId) => window.clearTimeout(timerId))
+    hoverPrefetchTimersRef.current.clear()
+    queuedPrefetchKeysRef.current.clear()
+    queuedPrefetchTasksRef.current = []
+    inFlightPrefetchKeysRef.current.clear()
+    inFlightPrefetchCountRef.current = 0
+  }, [selectedGameFilterKey])
+
+  useEffect(() => () => {
+    hoverPrefetchTimersRef.current.forEach((timerId) => window.clearTimeout(timerId))
+    hoverPrefetchTimersRef.current.clear()
+  }, [])
 
   useEffect(() => {
     let isActive = true
@@ -85,6 +117,7 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
 
     setIsDetailLoading(true)
     setDetailError('')
+    setLoadingTargetLabel(toDisplayName(nameOrId))
 
     try {
       const payload = await fetchPokemonDetail(nameOrId)
@@ -95,7 +128,85 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
       setDetailError(error.message)
     } finally {
       setIsDetailLoading(false)
+      setLoadingTargetLabel('')
     }
+  }
+
+  function pumpPrefetchQueue() {
+    while (
+      inFlightPrefetchCountRef.current < MAX_DETAIL_PREFETCH_CONCURRENCY
+      && queuedPrefetchTasksRef.current.length > 0
+    ) {
+      const nextTask = queuedPrefetchTasksRef.current.shift()
+      if (!nextTask) {
+        return
+      }
+
+      inFlightPrefetchCountRef.current += 1
+      inFlightPrefetchKeysRef.current.add(nextTask.normalizedKey)
+
+      void nextTask.run()
+        .catch(() => {
+          // Ignore prefetch failures and let explicit selection handle errors.
+        })
+        .finally(() => {
+          inFlightPrefetchCountRef.current -= 1
+          inFlightPrefetchKeysRef.current.delete(nextTask.normalizedKey)
+          queuedPrefetchKeysRef.current.delete(nextTask.normalizedKey)
+          pumpPrefetchQueue()
+        })
+    }
+  }
+
+  function enqueuePokemonDetailPrefetch(nameOrId) {
+    const normalizedKey = String(nameOrId || '').trim().toLowerCase()
+    if (
+      !normalizedKey
+      || prefetchedDetailKeysRef.current.has(normalizedKey)
+      || queuedPrefetchKeysRef.current.has(normalizedKey)
+      || inFlightPrefetchKeysRef.current.has(normalizedKey)
+    ) {
+      return
+    }
+
+    queuedPrefetchKeysRef.current.add(normalizedKey)
+    queuedPrefetchTasksRef.current.push({
+      normalizedKey,
+      run: async () => {
+        await fetchPokemonDetail(normalizedKey)
+        prefetchedDetailKeysRef.current.add(normalizedKey)
+      },
+    })
+    pumpPrefetchQueue()
+  }
+
+  function schedulePokemonDetailPreview(nameOrId) {
+    const normalizedKey = String(nameOrId || '').trim().toLowerCase()
+    if (!normalizedKey) {
+      return
+    }
+
+    if (hoverPrefetchTimersRef.current.has(normalizedKey)) {
+      return
+    }
+
+    const timerId = window.setTimeout(() => {
+      hoverPrefetchTimersRef.current.delete(normalizedKey)
+      enqueuePokemonDetailPrefetch(normalizedKey)
+    }, DETAIL_PREFETCH_HOVER_DELAY_MS)
+
+    hoverPrefetchTimersRef.current.set(normalizedKey, timerId)
+  }
+
+  function cancelPokemonDetailPreview(nameOrId) {
+    const normalizedKey = String(nameOrId || '').trim().toLowerCase()
+    const timerId = hoverPrefetchTimersRef.current.get(normalizedKey)
+    if (!timerId) {
+      return
+    }
+
+    window.clearTimeout(timerId)
+    hoverPrefetchTimersRef.current.delete(normalizedKey)
   }
 
   function handleAddToTeam() {
@@ -142,11 +253,14 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
           listError={listError}
           filteredPokemon={filteredPokemon}
           onPokemonSelect={loadPokemonDetail}
+          onPokemonPreviewStart={schedulePokemonDetailPreview}
+          onPokemonPreviewCancel={cancelPokemonDetailPreview}
         />
 
         <PokemonInfoPanel
           selectedPokemon={selectedPokemon}
           isDetailLoading={isDetailLoading}
+          loadingTargetLabel={loadingTargetLabel}
           detailError={detailError}
           onAddToTeam={handleAddToTeam}
           teamCount={team.length}

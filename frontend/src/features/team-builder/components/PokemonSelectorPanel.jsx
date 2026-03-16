@@ -11,6 +11,8 @@ function PokemonSelectorPanel({
   listError,
   filteredPokemon,
   onPokemonSelect,
+  onPokemonPreviewStart,
+  onPokemonPreviewCancel,
 }) {
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false)
   const filterMenuRef = useRef(null)
@@ -99,6 +101,10 @@ function PokemonSelectorPanel({
                 type="button"
                 className="pokemon-row"
                 onClick={() => onPokemonSelect(pokemon.name)}
+                onMouseEnter={() => onPokemonPreviewStart?.(pokemon.name)}
+                onMouseLeave={() => onPokemonPreviewCancel?.(pokemon.name)}
+                onFocus={() => onPokemonPreviewStart?.(pokemon.name)}
+                onBlur={() => onPokemonPreviewCancel?.(pokemon.name)}
               >
                 <span>#{String(pokemon.id).padStart(3, '0')}</span>
                 <strong>{pokemon.name}</strong>

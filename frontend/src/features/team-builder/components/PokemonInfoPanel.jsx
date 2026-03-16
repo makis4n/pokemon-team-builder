@@ -3,6 +3,7 @@ import { formatAbilityList } from '../formatters'
 function PokemonInfoPanel({
   selectedPokemon,
   isDetailLoading,
+  loadingTargetLabel,
   detailError,
   onAddToTeam,
   teamCount,
@@ -14,14 +15,20 @@ function PokemonInfoPanel({
     <section className="pixel-panel">
       <h2>Pokemon Info</h2>
 
-      {isDetailLoading && <p className="state-text">Loading details...</p>}
+      {isDetailLoading && (
+        <p className="state-text">
+          {loadingTargetLabel
+            ? `Loading ${loadingTargetLabel}...`
+            : 'Loading details...'}
+        </p>
+      )}
       {!isDetailLoading && detailError && <p className="state-text error">{detailError}</p>}
 
       {!isDetailLoading && !selectedPokemon && !detailError && (
         <p className="state-text">Choose a Pokemon from the left panel to inspect details.</p>
       )}
 
-      {selectedPokemon && !isDetailLoading && (
+      {selectedPokemon && (
         <article className="pokemon-card">
           <div className="pokemon-card-head">
             <div className="pokemon-card-sprite">

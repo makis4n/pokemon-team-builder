@@ -8,6 +8,9 @@ import { getSelectedGameFilterFromSession } from '../features/team-builder/stora
 import TeamPokemonDetailPanel from '../features/team-detail/components/TeamPokemonDetailPanel'
 import TeamDetailCurrentTeamPanel from '../features/team-detail/components/TeamDetailCurrentTeamPanel'
 
+const EVOLUTION_PREFETCH_HOVER_DELAY_MS = 180
+const MAX_EVOLUTION_PREFETCH_CONCURRENCY = 2
+
 function TeamDetailPage({ team, teamLimit }) {
   const [selectedPokemonId, setSelectedPokemonId] = useState(null)
   const [activePokemonQuery, setActivePokemonQuery] = useState(null)
@@ -17,6 +20,11 @@ function TeamDetailPage({ team, teamLimit }) {
   const [isLoading, setIsLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const prefetchedDetailKeysRef = useRef(new Set())
+  const evolutionHoverTimersRef = useRef(new Map())
+  const evolutionQueuedPrefetchKeysRef = useRef(new Set())
+  const evolutionQueuedPrefetchTasksRef = useRef([])
+  const evolutionInFlightPrefetchKeysRef = useRef(new Set())
+  const evolutionInFlightPrefetchCountRef = useRef(0)
 
   const selectedGameFilterKey = getSelectedGameFilterFromSession()
   const isFilterSelected = selectedGameFilterKey !== DEFAULT_GAME_FILTER_KEY
@@ -58,7 +66,18 @@ function TeamDetailPage({ team, teamLimit }) {
 
   useEffect(() => {
     prefetchedDetailKeysRef.current = new Set()
+    evolutionHoverTimersRef.current.forEach((timerId) => window.clearTimeout(timerId))
+    evolutionHoverTimersRef.current.clear()
+    evolutionQueuedPrefetchKeysRef.current.clear()
+    evolutionQueuedPrefetchTasksRef.current = []
+    evolutionInFlightPrefetchKeysRef.current.clear()
+    evolutionInFlightPrefetchCountRef.current = 0
   }, [selectedGameFilterKey])
+
+  useEffect(() => () => {
+    evolutionHoverTimersRef.current.forEach((timerId) => window.clearTimeout(timerId))
+    evolutionHoverTimersRef.current.clear()
+  }, [])
 
   useEffect(() => {
     if (!isFilterSelected) {
@@ -186,6 +205,89 @@ function TeamDetailPage({ team, teamLimit }) {
     setActivePokemonQuery(nextPokemonIdOrName)
   }
 
+  function pumpEvolutionPrefetchQueue() {
+    while (
+      evolutionInFlightPrefetchCountRef.current < MAX_EVOLUTION_PREFETCH_CONCURRENCY
+      && evolutionQueuedPrefetchTasksRef.current.length > 0
+    ) {
+      const nextTask = evolutionQueuedPrefetchTasksRef.current.shift()
+      if (!nextTask) {
+        return
+      }
+
+      evolutionInFlightPrefetchCountRef.current += 1
+      evolutionInFlightPrefetchKeysRef.current.add(nextTask.prefetchKey)
+
+      void nextTask.run()
+        .catch(() => {
+          // Ignore evolution hover prefetch failures; explicit click handles errors.
+        })
+        .finally(() => {
+          evolutionInFlightPrefetchCountRef.current -= 1
+          evolutionInFlightPrefetchKeysRef.current.delete(nextTask.prefetchKey)
+          evolutionQueuedPrefetchKeysRef.current.delete(nextTask.prefetchKey)
+          pumpEvolutionPrefetchQueue()
+        })
+    }
+  }
+
+  function enqueueEvolutionPreviewPrefetch(nextPokemonIdOrName) {
+    const normalizedQuery = String(nextPokemonIdOrName || '').trim().toLowerCase()
+    if (!normalizedQuery || !isFilterSelected) {
+      return
+    }
+
+    const prefetchKey = `${selectedGameFilterKey}:${normalizedQuery}`
+    if (
+      prefetchedDetailKeysRef.current.has(prefetchKey)
+      || evolutionQueuedPrefetchKeysRef.current.has(prefetchKey)
+      || evolutionInFlightPrefetchKeysRef.current.has(prefetchKey)
+    ) {
+      return
+    }
+
+    evolutionQueuedPrefetchKeysRef.current.add(prefetchKey)
+    evolutionQueuedPrefetchTasksRef.current.push({
+      prefetchKey,
+      run: async () => {
+        await fetchPokemonTeamDetail(nextPokemonIdOrName, selectedGameFilterKey, {
+          includeMoveDetails: false,
+        })
+        prefetchedDetailKeysRef.current.add(prefetchKey)
+      },
+    })
+    pumpEvolutionPrefetchQueue()
+  }
+
+  function handleEvolutionPreviewStart(nextPokemonIdOrName) {
+    const normalizedQuery = String(nextPokemonIdOrName || '').trim().toLowerCase()
+    if (!normalizedQuery) {
+      return
+    }
+
+    if (evolutionHoverTimersRef.current.has(normalizedQuery)) {
+      return
+    }
+
+    const timerId = window.setTimeout(() => {
+      evolutionHoverTimersRef.current.delete(normalizedQuery)
+      enqueueEvolutionPreviewPrefetch(nextPokemonIdOrName)
+    }, EVOLUTION_PREFETCH_HOVER_DELAY_MS)
+
+    evolutionHoverTimersRef.current.set(normalizedQuery, timerId)
+  }
+
+  function handleEvolutionPreviewCancel(nextPokemonIdOrName) {
+    const normalizedQuery = String(nextPokemonIdOrName || '').trim().toLowerCase()
+    const timerId = evolutionHoverTimersRef.current.get(normalizedQuery)
+    if (!timerId) {
+      return
+    }
+
+    window.clearTimeout(timerId)
+    evolutionHoverTimersRef.current.delete(normalizedQuery)
+  }
+
   function handleGoBack() {
     setNavigationStack((current) => {
       if (!current.length) {
@@ -216,6 +318,8 @@ function TeamDetailPage({ team, teamLimit }) {
           canGoBack={navigationStack.length > 0}
           onGoBack={handleGoBack}
           onInspectPokemon={handleInspectPokemon}
+          onEvolutionPreviewStart={handleEvolutionPreviewStart}
+          onEvolutionPreviewCancel={handleEvolutionPreviewCancel}
         />
 
         <TeamDetailCurrentTeamPanel
