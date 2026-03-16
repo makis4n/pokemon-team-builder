@@ -126,6 +126,7 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
     const topK = Number(req.body?.topK || 5);
     const candidateLimit = Number(req.body?.candidateLimit || 90);
     const scanLimit = Number(req.body?.scanLimit || 240);
+    const teamSizeTarget = Number(req.body?.teamSizeTarget || 6);
     const generationFilter = req.body?.generationFilter || {};
     const generationFilterEnabled = Boolean(generationFilter?.enabled);
     const filterGenerationNumber = Number(generationFilter?.generationNumber || 0) || null;
@@ -141,7 +142,7 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
       .sort((left, right) => left - right)
       .join(',');
     const generationSignature = generationFilterEnabled ? `gen=${filterGenerationNumber || 'invalid'}` : 'gen=all';
-    const cacheKey = `${teamSignature}|${generationSignature}|k=${topK}|limit=${candidateLimit}|scan=${scanLimit}`;
+    const cacheKey = `${teamSignature}|${generationSignature}|size=${teamSizeTarget}|k=${topK}|limit=${candidateLimit}|scan=${scanLimit}`;
 
     const cachedResponse = readRouteCache(defensiveSwapsCache, cacheKey);
     if (cachedResponse) {
@@ -192,6 +193,7 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
     const data = recommendDefensiveSwaps(team, candidatePool, {
       topK,
       maxCandidates: candidateLimit,
+      teamSizeTarget,
     });
 
     writeRouteCache(defensiveSwapsCache, cacheKey, data, DEFENSIVE_SWAPS_CACHE_TTL_MS);

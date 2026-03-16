@@ -115,6 +115,7 @@ export function fetchPokemonDetail(nameOrId) {
 
 export function fetchDefensiveSwapRecommendations({
   team,
+  teamSizeTarget = 6,
   topK = 5,
   candidateLimit = 90,
   scanLimit = 240,
@@ -128,6 +129,7 @@ export function fetchDefensiveSwapRecommendations({
       .map((pokemon) => pokemon?.id)
       .filter(Boolean)
       .sort((left, right) => left - right),
+    `size${teamSizeTarget}`,
     filterEnabled ? `g${filterGenerationNumber}` : 'all-gen',
     topK,
     candidateLimit,
@@ -141,6 +143,7 @@ export function fetchDefensiveSwapRecommendations({
     },
     body: JSON.stringify({
       team,
+      teamSizeTarget,
       topK,
       candidateLimit,
       scanLimit,

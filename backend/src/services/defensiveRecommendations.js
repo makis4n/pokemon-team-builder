@@ -519,7 +519,13 @@ function selectTopUniqueIncomingRecommendations(sortedRecommendations, topK) {
 
   return selectedOrder.map((entry) => {
     const uniqueOutgoingNames = Array.from(
-      new Set(entry.alternativeOutgoing.map((pokemon) => toDisplayPokemonName(pokemon.name))),
+      new Set(entry.alternativeOutgoing.map((pokemon) => {
+        if (!pokemon?.name) {
+          return 'Empty Slot';
+        }
+
+        return toDisplayPokemonName(pokemon.name);
+      })),
     ).sort((left, right) => left.localeCompare(right));
 
     return {
@@ -536,6 +542,8 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
 
   const topK = options.topK ?? 5;
   const maxCandidates = options.maxCandidates ?? 90;
+  const normalizedTeamSizeTarget = Math.max(Number(options.teamSizeTarget) || team.length, team.length);
+  const emptySlotCount = Math.max(0, normalizedTeamSizeTarget - team.length);
   const teamIds = new Set(team.map((pokemon) => pokemon.id));
   const baselineMetrics = getTeamMetrics(team);
 
@@ -546,18 +554,33 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
 
   const recommendations = [];
 
-  for (let outgoingIndex = 0; outgoingIndex < team.length; outgoingIndex += 1) {
-    const outgoingPokemon = team[outgoingIndex];
+  if (emptySlotCount > 0) {
+    // If team is not full yet, only recommend additions into empty slots.
+    for (let emptySlotIndex = 0; emptySlotIndex < emptySlotCount; emptySlotIndex += 1) {
+      for (const incomingPokemon of eligibleCandidates) {
+        const nextTeam = [...team, incomingPokemon];
+        const nextMetrics = getTeamMetrics(nextTeam);
+        const recommendation = buildRecommendation(null, incomingPokemon, baselineMetrics, nextMetrics);
 
-    for (const incomingPokemon of eligibleCandidates) {
-      const nextTeam = team.slice();
-      nextTeam[outgoingIndex] = incomingPokemon;
+        if (recommendation) {
+          recommendations.push(recommendation);
+        }
+      }
+    }
+  } else {
+    for (let outgoingIndex = 0; outgoingIndex < team.length; outgoingIndex += 1) {
+      const outgoingPokemon = team[outgoingIndex];
 
-      const nextMetrics = getTeamMetrics(nextTeam);
-      const recommendation = buildRecommendation(outgoingPokemon, incomingPokemon, baselineMetrics, nextMetrics);
+      for (const incomingPokemon of eligibleCandidates) {
+        const nextTeam = team.slice();
+        nextTeam[outgoingIndex] = incomingPokemon;
 
-      if (recommendation) {
-        recommendations.push(recommendation);
+        const nextMetrics = getTeamMetrics(nextTeam);
+        const recommendation = buildRecommendation(outgoingPokemon, incomingPokemon, baselineMetrics, nextMetrics);
+
+        if (recommendation) {
+          recommendations.push(recommendation);
+        }
       }
     }
   }
@@ -576,15 +599,22 @@ function recommendDefensiveSwaps(team, candidatePool, options = {}) {
         return left.incomingPokemon.name.localeCompare(right.incomingPokemon.name);
       }
 
-      return left.outgoingPokemon.name.localeCompare(right.outgoingPokemon.name);
+      const leftOutgoingName = left.outgoingPokemon?.name || '';
+      const rightOutgoingName = right.outgoingPokemon?.name || '';
+
+      return leftOutgoingName.localeCompare(rightOutgoingName);
     });
 
   const selectedRecommendations = selectTopUniqueIncomingRecommendations(sortedRecommendations, topK);
 
   return selectedRecommendations
     .map((entry) => ({
+      isAddition: entry.outgoingPokemonNames.length === 1 && entry.outgoingPokemonNames[0] === 'Empty Slot',
       score: Math.ceil(entry.score),
-      outgoingPokemonName: entry.outgoingPokemonNames.join(', '),
+      outgoingPokemonName:
+        entry.outgoingPokemonNames.length === 1 && entry.outgoingPokemonNames[0] === 'Empty Slot'
+          ? ''
+          : entry.outgoingPokemonNames.join(', '),
       incomingPokemonName: toDisplayPokemonName(entry.incomingPokemon.name),
       incomingPokemonId: entry.incomingPokemon.id,
       incomingPokemonSprite: entry.incomingPokemon.sprite,

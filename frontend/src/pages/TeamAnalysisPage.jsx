@@ -108,6 +108,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
 
         const payload = await fetchDefensiveSwapRecommendations({
           team,
+          teamSizeTarget: teamLimit,
           topK: 5,
           candidateLimit: RECOMMENDATION_CANDIDATE_LIMIT,
           scanLimit: RECOMMENDATION_SOURCE_MAX_SCAN,
@@ -145,7 +146,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
     return () => {
       isActive = false
     }
-  }, [selectedGameFilter, selectedGameFilterKey, team])
+  }, [selectedGameFilter, selectedGameFilterKey, team, teamLimit])
 
   const roleBreakdown = useMemo(() => buildRoleBreakdown(team), [team])
   const teamSlots = useMemo(

@@ -244,8 +244,12 @@ function AnalysisOverviewPanel({
                       </div>
                       <div className="swap-recommendation-content">
                         <p className="swap-recommendation-head">
-                          <strong>{recommendation.outgoingPokemonName}</strong>
-                          <span aria-hidden="true">{' -> '}</span>
+                          {!recommendation.isAddition && (
+                            <>
+                              <strong>{recommendation.outgoingPokemonName}</strong>
+                              <span aria-hidden="true">{' -> '}</span>
+                            </>
+                          )}
                           <strong>{recommendation.incomingPokemonName}</strong>
                           <em>Score +{recommendation.score}</em>
                         </p>
