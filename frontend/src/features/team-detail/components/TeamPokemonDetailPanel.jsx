@@ -18,11 +18,14 @@ function TeamPokemonDetailPanel({
   }
 
   const filterPromptText = 'Select a filter to view Pokemon details.'
+  const isAvailabilityError = String(error || '').toLowerCase().includes('not available in the selected game filter')
   const pokedexDescription = detailData?.pokedexDescription
     || (isFilterSelected
       ? 'No Pokedex description available for this Pokemon.'
       : 'Select a filter to view this Pokemon\'s Pokedex description.')
   const abilityEffectsByName = detailData?.abilityEffectsByName || {}
+  const detailPayload = detailData || {}
+  const shouldRenderContent = !isFilterSelected || (!isLoading && (!error || Boolean(detailData)))
 
   function formatDisplayName(value) {
     return String(value || '')
@@ -36,9 +39,15 @@ function TeamPokemonDetailPanel({
       <h2>Pokemon Details</h2>
 
       {isFilterSelected && isLoading && <p className="state-text">Loading detailed info...</p>}
-      {isFilterSelected && !isLoading && error && <p className="state-text error">{error}</p>}
+      {isFilterSelected && !isLoading && error && (
+        <p className="state-text error">
+          {isAvailabilityError
+            ? `Pokemon unavailable for this filter: ${error}`
+            : error}
+        </p>
+      )}
 
-      {(!isFilterSelected || (!isLoading && !error && detailData)) && (
+      {shouldRenderContent && (
         <>
           <article className="pokemon-card team-detail-hero-card">
             <div className="pokemon-card-head team-detail-hero-head">
@@ -98,27 +107,27 @@ function TeamPokemonDetailPanel({
               </button>
             )}
 
-            {isFilterSelected && !detailData.evolution?.from && (!detailData.evolution?.to || detailData.evolution.to.length === 0) && (
+            {isFilterSelected && !detailPayload.evolution?.from && (!detailPayload.evolution?.to || detailPayload.evolution.to.length === 0) && (
               <p className="state-text">No evolution data available.</p>
             )}
 
-            {isFilterSelected && detailData.evolution?.from && (
+            {isFilterSelected && detailPayload.evolution?.from && (
               <ul className="team-detail-list team-static-list">
                 <li>
                   <button
                     type="button"
                     className="team-static-entry-button"
-                    onClick={() => onInspectPokemon(detailData.evolution.from.speciesId || detailData.evolution.from.speciesName)}
+                    onClick={() => onInspectPokemon(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
                   >
-                    <strong>Evolves from:</strong> {detailData.evolution.from.speciesName} ({detailData.evolution.from.condition})
+                    <strong>Evolves from:</strong> {detailPayload.evolution.from.speciesName} ({detailPayload.evolution.from.condition})
                   </button>
                 </li>
               </ul>
             )}
 
-            {isFilterSelected && detailData.evolution?.to?.length > 0 && (
+            {isFilterSelected && detailPayload.evolution?.to?.length > 0 && (
               <ul className="team-detail-list team-static-list">
-                {detailData.evolution.to.map((entry) => (
+                {detailPayload.evolution.to.map((entry) => (
                   <li key={`${selectedPokemon.id}-to-${entry.speciesName}`}>
                     <button
                       type="button"
@@ -137,19 +146,18 @@ function TeamPokemonDetailPanel({
             <h3>Move Info</h3>
             {!isFilterSelected && <p className="team-filter-alert">{filterPromptText}</p>}
 
-            {isFilterSelected && detailData.levelUpMoves?.length === 0 && (
+            {isFilterSelected && detailPayload.levelUpMoves?.length === 0 && (
               <p className="state-text">No moves available for the selected game filter.</p>
             )}
 
-            {isFilterSelected && detailData.levelUpMoves?.length > 0 && (
+            {isFilterSelected && detailPayload.levelUpMoves?.length > 0 && (
               <ul className="team-detail-list team-move-list">
-                {detailData.levelUpMoves.map((move) => (
+                {detailPayload.levelUpMoves.map((move) => (
                   <li key={`${selectedPokemon.id}-move-${move.moveName}`} className="team-move-entry">
                     <details className="team-move-dropdown">
                       <summary className="team-move-row">
                         <span>
                           <strong>Lv {move.level}:</strong> {move.moveName}
-                          <span className="team-detail-meta"> ({move.versionGroupName})</span>
                         </span>
                         <span className="team-move-summary-right">
                           <span className="team-move-arrow" aria-hidden="true" />
@@ -186,13 +194,13 @@ function TeamPokemonDetailPanel({
             <h3>Encounter Locations</h3>
             {!isFilterSelected && <p className="team-filter-alert">{filterPromptText}</p>}
 
-            {isFilterSelected && detailData.encounters?.length === 0 && (
+            {isFilterSelected && detailPayload.encounters?.length === 0 && (
               <p className="state-text">No encounter location data for the selected game filter.</p>
             )}
 
-            {isFilterSelected && detailData.encounters?.length > 0 && (
+            {isFilterSelected && detailPayload.encounters?.length > 0 && (
               <ul className="team-detail-list compact team-static-list">
-                {detailData.encounters.map((encounter) => (
+                {detailPayload.encounters.map((encounter) => (
                   <li key={`${selectedPokemon.id}-encounter-${encounter.locationName}`}>
                     <strong>{encounter.locationName}:</strong>
                     <span className="team-detail-meta"> {encounter.methods.join(', ')}</span>

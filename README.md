@@ -1,6 +1,6 @@
 # Pokemon Team Builder
 
-A simple Pokemon team builder with a Team Analysis page that shows role balance, defensive weaknesses, and suggested defensive swaps.
+A casual-playthrough Pokemon team builder meant for players progressing through the main games, with a Team Analysis page that highlights role balance, defensive weaknesses, and suggested defensive swaps (not competitive meta optimisation).
 
 ## Tech Stack
 
@@ -17,8 +17,9 @@ External API:
 
 Backend endpoints used by the frontend:
 
-- `GET /api/pokemon?limit=&offset=`: list Pokemon
+- `GET /api/pokemon?limit=&offset=&gameFilterKey=`: list Pokemon (optionally scoped by selected game filter)
 - `GET /api/pokemon/:nameOrId`: Pokemon details
+- `GET /api/pokemon/:nameOrId/team-detail?gameFilterKey=`: enriched team-detail payload (evolution, moves, encounters, tooltips)
 - `POST /api/pokemon/team-defense-analysis`: type summary + defensive insights for the current team
 - `POST /api/pokemon/defensive-swaps`: defensive swap recommendations
 
@@ -26,34 +27,34 @@ Backend endpoints used by the frontend:
 
 - Search and add Pokemon to a 6-member team
 - View Pokemon details (types, abilities, base stats)
-- Filter Pokemon by official game group (mapped to generation)
+- Filter Pokemon by game
 - Team Analysis page with:
   - stat/role radar
   - type weakness summary bars
   - defensive insight warnings
   - recommended defensive swaps
 - Team Detail page with:
-  - click a Pokemon in Current Team (right panel)
-  - see evolution conditions
-  - see level-up move learn levels
+  - click a Pokemon in Current Team (right panel) to load details on the left
+  - click evolution entries to inspect that evolution target in the detail card
+  - hover abilities to see tooltips with ability effects
+  - expand move entries to see category, power, accuracy, PP, flavor text, and effect text
   - see encounter locations for selected game filter
 
 ## Game Filter Behavior
 
 The Team Builder includes a **Game Filter** dropdown.
-Each game group maps to a Pokemon generation (Gen 1 to Gen 9).
 
 How it works:
 
-1. If no generation filter is selected (All Games), the Select Pokemon list shows up to 50 Pokemon.
-2. If a generation-based game filter is selected, the Select Pokemon list shows all Pokemon from that generation.
-3. The selected filter is saved in session storage and restored when you come back.
-4. Pokemon details are checked against the selected generation, so out-of-generation picks are blocked.
+1. If no game filter is selected (All Supported Games), the Select Pokemon list shows up to 50 Pokemon.
+2. If a game filter is selected, the Select Pokemon list is filtered by Pokemon availability in that filter's games.
+3. Availability is determined by PokeAPI Pokedex entries mapped through the selected filter's version groups.
+4. The selected filter is saved in session storage and restored when you come back.
 
 How it affects recommendations:
 
-1. Defensive swap recommendations are generated only from the selected generation when a filter is active.
-2. If your current team contains Pokemon outside the selected generation, recommendations are blocked and an error is shown until the team/filter is fixed.
+1. Defensive swap recommendations are generated from Pokemon available in the selected game filter.
+2. If your current team contains Pokemon unavailable in the selected game filter, recommendations are blocked and an error is shown until the team/filter is fixed.
 
 ## Team Detail Page
 
@@ -62,13 +63,18 @@ The Team Detail page is designed to give you a breakdown of specific Pokemon on 
 How it works:
 
 1. The first Pokemon is auto-selected when the page opens.
-2. Clicking a team member loads detailed information on the left:
-
-- evolution conditions
-- level-up moves and learn levels
-- encounter locations
-
-3. Move and encounter data are scoped to your selected game filter.
+2. Clicking a team member on the right panel loads detailed information on the left.
+3. Evolution entries are clickable; clicking one opens that target Pokemon in the detail card.
+4. A back option appears after evolution navigation so you can return to the previous Pokemon.
+5. Abilities are shown as chips with pixel-style hover tooltips for ability effects.
+6. Move entries are expandable dropdown rows with level learnt, move name, plus:
+   - category
+   - power
+   - accuracy
+   - PP
+   - flavor text and effect text
+7. Move and encounter data are scoped to your selected game filter.
+8. Evolution drilldown targets unavailable in the selected game filter show a clear unavailable message while keeping panel navigation usable.
 
 ## Example Images
 

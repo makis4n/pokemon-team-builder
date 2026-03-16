@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchPokemonDetail, fetchPokemonList } from '../features/team-builder/api'
 import {
   DEFAULT_GAME_FILTER_KEY,
-  GENERATION_POKEDEX_RANGES,
-  GAME_FILTER_OPTION_BY_KEY,
   GAME_FILTER_OPTIONS,
   statLabels,
 } from '../features/team-builder/constants'
@@ -25,10 +23,6 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
   const [listError, setListError] = useState('')
   const [detailError, setDetailError] = useState('')
 
-  const selectedGameFilter = GAME_FILTER_OPTION_BY_KEY[selectedGameFilterKey]
-    ?? GAME_FILTER_OPTION_BY_KEY[DEFAULT_GAME_FILTER_KEY]
-  const selectedGenerationNumber = selectedGameFilter?.generationNumber ?? null
-
   useEffect(() => {
     saveSelectedGameFilterToSession(selectedGameFilterKey)
   }, [selectedGameFilterKey])
@@ -42,7 +36,7 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
 
       try {
         /* Limit to 9999 so that no special forms are shown */
-        const payload = await fetchPokemonList(1025, 0, selectedGenerationNumber)
+        const payload = await fetchPokemonList(1025, 0, selectedGameFilterKey)
 
         if (!isActive) {
           return
@@ -67,30 +61,20 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
     return () => {
       isActive = false
     }
-  }, [selectedGenerationNumber])
+  }, [selectedGameFilterKey])
 
   const filteredPokemon = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
-    const generationRange = selectedGenerationNumber
-      ? GENERATION_POKEDEX_RANGES[selectedGenerationNumber]
-      : null
-
-    const generationFilteredPokemon = generationRange
-      ? allPokemon.filter((pokemon) => (
-        pokemon.id >= generationRange.startId && pokemon.id <= generationRange.endId
-      ))
+    const queryFilteredPokemon = normalizedQuery
+      ? allPokemon.filter((pokemon) => pokemon.name.startsWith(normalizedQuery))
       : allPokemon
 
-    const queryFilteredPokemon = normalizedQuery
-      ? generationFilteredPokemon.filter((pokemon) => pokemon.name.startsWith(normalizedQuery))
-      : generationFilteredPokemon
-
-    if (!selectedGenerationNumber) {
+    if (selectedGameFilterKey === DEFAULT_GAME_FILTER_KEY) {
       return queryFilteredPokemon.slice(0, 50)
     }
 
     return queryFilteredPokemon
-  }, [allPokemon, query, selectedGenerationNumber])
+  }, [allPokemon, query, selectedGameFilterKey])
 
   const teamIds = useMemo(() => new Set(team.map((pokemon) => pokemon.id)), [team])
 
@@ -105,17 +89,6 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
     try {
       const payload = await fetchPokemonDetail(nameOrId)
       const nextPokemon = payload.data
-
-      if (
-        selectedGenerationNumber
-        && nextPokemon?.generationNumber !== selectedGenerationNumber
-      ) {
-        setSelectedPokemon(null)
-        setDetailError(
-          `This Pokemon is not from ${selectedGameFilter.label}. Choose a Pokemon from Gen ${selectedGenerationNumber}.`,
-        )
-        return
-      }
 
       setSelectedPokemon(nextPokemon)
     } catch (error) {

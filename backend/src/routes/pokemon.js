@@ -1,5 +1,11 @@
 const express = require('express');
-const { listPokemon, getPokemonByNameOrId, getPokemonTeamDetail, listDefensiveCandidates } = require('../services/pokeapi');
+const {
+  listPokemon,
+  getPokemonByNameOrId,
+  getPokemonTeamDetail,
+  listDefensiveCandidates,
+  isPokemonAvailableInGameFilter,
+} = require('../services/pokeapi');
 const {
   getPriorityWeakTypes,
   computeWeightedTypeSummary,
@@ -12,41 +18,6 @@ const DEFENSIVE_ANALYSIS_CACHE_TTL_MS = 3 * 60 * 1000;
 const DEFENSIVE_SWAPS_CACHE_TTL_MS = 3 * 60 * 1000;
 const defensiveAnalysisCache = new Map();
 const defensiveSwapsCache = new Map();
-
-async function resolveTeamGenerationNumbers(team) {
-  const generationByPokemon = [];
-
-  for (const pokemon of team) {
-    const providedGeneration = Number(pokemon?.generationNumber);
-    if (providedGeneration > 0) {
-      generationByPokemon.push({
-        id: Number(pokemon?.id) || null,
-        name: String(pokemon?.name || ''),
-        generationNumber: providedGeneration,
-      });
-      continue;
-    }
-
-    const pokemonId = Number(pokemon?.id);
-    if (!Number.isFinite(pokemonId) || pokemonId <= 0) {
-      generationByPokemon.push({
-        id: null,
-        name: String(pokemon?.name || ''),
-        generationNumber: null,
-      });
-      continue;
-    }
-
-    const detail = await getPokemonByNameOrId(pokemonId);
-    generationByPokemon.push({
-      id: pokemonId,
-      name: String(detail?.name || pokemon?.name || ''),
-      generationNumber: Number(detail?.generationNumber) || null,
-    });
-  }
-
-  return generationByPokemon;
-}
 
 function toDisplayPokemonName(name) {
   return String(name || '')
@@ -81,9 +52,9 @@ pokemonRouter.get('/', async (req, res, next) => {
     const { search } = req.query;
     const limit = Number(req.query.limit || 20);
     const offset = Number(req.query.offset || 0);
-    const generationNumber = Number(req.query.generation || 0) || null;
+    const gameFilterKey = String(req.query.gameFilterKey || 'all');
 
-    const data = await listPokemon({ search, limit, offset, generationNumber });
+    const data = await listPokemon({ search, limit, offset, gameFilterKey });
     res.status(200).json({ data });
   } catch (error) {
     next(error);
@@ -104,14 +75,14 @@ pokemonRouter.get('/defensive-candidates', async (req, res, next) => {
 
     const limit = Number(req.query.limit || 90);
     const scanLimit = Number(req.query.scanLimit || 240);
-    const generationNumber = Number(req.query.generation || 0) || null;
+    const gameFilterKey = String(req.query.gameFilterKey || 'all');
 
     const data = await listDefensiveCandidates({
       weakTypes,
       excludeIds,
       limit,
       scanLimit,
-      generationNumber,
+      gameFilterKey,
     });
 
     res.status(200).json({ data });
@@ -128,8 +99,8 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
     const scanLimit = Number(req.body?.scanLimit || 240);
     const teamSizeTarget = Number(req.body?.teamSizeTarget || 6);
     const generationFilter = req.body?.generationFilter || {};
-    const generationFilterEnabled = Boolean(generationFilter?.enabled);
-    const filterGenerationNumber = Number(generationFilter?.generationNumber || 0) || null;
+    const gameFilterKey = String(generationFilter?.gameFilterKey || 'all');
+    const gameFilterEnabled = gameFilterKey !== 'all' && Boolean(generationFilter?.enabled ?? true);
 
     if (team.length === 0) {
       res.status(200).json({ data: [] });
@@ -141,8 +112,8 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
       .filter((id) => Number.isFinite(id))
       .sort((left, right) => left - right)
       .join(',');
-    const generationSignature = generationFilterEnabled ? `gen=${filterGenerationNumber || 'invalid'}` : 'gen=all';
-    const cacheKey = `${teamSignature}|${generationSignature}|size=${teamSizeTarget}|k=${topK}|limit=${candidateLimit}|scan=${scanLimit}`;
+    const filterSignature = gameFilterEnabled ? `filter=${gameFilterKey}` : 'filter=all';
+    const cacheKey = `${teamSignature}|${filterSignature}|size=${teamSizeTarget}|k=${topK}|limit=${candidateLimit}|scan=${scanLimit}`;
 
     const cachedResponse = readRouteCache(defensiveSwapsCache, cacheKey);
     if (cachedResponse) {
@@ -155,26 +126,37 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
       .map((pokemon) => Number(pokemon?.id))
       .filter((id) => Number.isFinite(id));
 
-    if (generationFilterEnabled) {
-      if (!filterGenerationNumber) {
-        const error = new Error('Generation filter is enabled but no valid generation was provided.');
-        error.statusCode = 400;
-        throw error;
-      }
+    if (gameFilterEnabled) {
+      const teamAvailabilityResults = await Promise.all(
+        team.map(async (pokemon) => {
+          const pokemonId = Number(pokemon?.id || 0);
+          const pokemonName = String(pokemon?.name || 'Unknown Pokemon');
 
-      const teamGenerationEntries = await resolveTeamGenerationNumbers(team);
-      const inconsistentEntries = teamGenerationEntries.filter(
-        (entry) => entry.generationNumber !== filterGenerationNumber,
+          if (!Number.isFinite(pokemonId) || pokemonId <= 0) {
+            return {
+              isAvailable: false,
+              name: pokemonName,
+            };
+          }
+
+          const isAvailable = await isPokemonAvailableInGameFilter(pokemonId, gameFilterKey);
+          return {
+            isAvailable,
+            name: pokemonName,
+          };
+        }),
       );
 
-      if (inconsistentEntries.length > 0) {
-        const names = inconsistentEntries
+      const unavailableEntries = teamAvailabilityResults.filter((entry) => !entry.isAvailable);
+
+      if (unavailableEntries.length > 0) {
+        const names = unavailableEntries
           .map((entry) => toDisplayPokemonName(entry.name))
           .filter(Boolean)
           .join(', ');
         const message = names
-          ? `Current team has Pokemon outside Generation ${filterGenerationNumber}: ${names}. Update your team or change the game filter.`
-          : `Current team contains Pokemon outside Generation ${filterGenerationNumber}. Update your team or change the game filter.`;
+          ? `Current team has Pokemon not available in the selected game filter: ${names}. Update your team or change the game filter.`
+          : 'Current team contains Pokemon not available in the selected game filter. Update your team or change the game filter.';
 
         const error = new Error(message);
         error.statusCode = 400;
@@ -187,7 +169,7 @@ pokemonRouter.post('/defensive-swaps', async (req, res, next) => {
       excludeIds,
       limit: candidateLimit,
       scanLimit,
-      generationNumber: generationFilterEnabled ? filterGenerationNumber : null,
+      gameFilterKey: gameFilterEnabled ? gameFilterKey : 'all',
     });
 
     const data = recommendDefensiveSwaps(team, candidatePool, {

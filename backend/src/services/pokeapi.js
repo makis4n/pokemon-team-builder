@@ -4,7 +4,7 @@ const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFENSIVE_CANDIDATE_CACHE_TTL_MS = 5 * 60 * 1000;
 const SPECIES_CACHE_TTL_MS = 30 * 60 * 1000;
 const EVOLUTION_CHAIN_CACHE_TTL_MS = 30 * 60 * 1000;
-const GENERATION_SUMMARY_CACHE_TTL_MS = 30 * 60 * 1000;
+const GAME_FILTER_SUMMARY_CACHE_TTL_MS = 30 * 60 * 1000;
 const TEAM_DETAIL_CACHE_TTL_MS = 15 * 60 * 1000;
 const MOVE_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const ABILITY_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -16,7 +16,11 @@ const detailCache = new Map();
 const defensiveCandidateCache = new Map();
 const speciesCache = new Map();
 const evolutionChainCache = new Map();
-const generationSummaryCache = new Map();
+const gameFilterSummaryCache = new Map();
+const gameFilterAvailabilityCache = new Map();
+const versionGroupPokedexCache = new Map();
+const pokedexPokemonCache = new Map();
+const allPokemonSummaryCache = new Map();
 const teamDetailCache = new Map();
 const moveTypeCache = new Map();
 const abilityDetailCache = new Map();
@@ -145,9 +149,124 @@ function toDisplayName(value) {
 function getGameFilterScope(gameFilterKey) {
   const key = GAME_FILTER_VERSION_GROUPS[gameFilterKey] ? gameFilterKey : 'all';
   return {
+    key,
     versionGroups: GAME_FILTER_VERSION_GROUPS[key],
     versions: GAME_FILTER_VERSIONS[key],
   };
+}
+
+function getNormalizedGameFilterKey(gameFilterKey) {
+  return getGameFilterScope(gameFilterKey).key;
+}
+
+async function getAllPokemonSummaries() {
+  const cacheKey = 'all';
+  const cached = readCache(allPokemonSummaryCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const listResponse = await fetchFromPokeApi('/pokemon?limit=20000&offset=0');
+  const normalized = (listResponse.results || [])
+    .map(normalizePokemonSummary)
+    .filter((entry) => entry.id && entry.name)
+    .sort((left, right) => left.id - right.id);
+
+  writeCache(allPokemonSummaryCache, cacheKey, normalized, GAME_FILTER_SUMMARY_CACHE_TTL_MS);
+  return normalized;
+}
+
+async function getPokedexIdsForVersionGroup(versionGroupName) {
+  const cacheKey = String(versionGroupName || '').toLowerCase();
+  const cached = readCache(versionGroupPokedexCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const payload = await fetchFromPokeApi(`/version-group/${encodeURIComponent(cacheKey)}`);
+  const pokedexIds = (payload?.pokedexes || [])
+    .map((entry) => extractIdFromUrl(entry?.url))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  writeCache(versionGroupPokedexCache, cacheKey, pokedexIds, GAME_FILTER_SUMMARY_CACHE_TTL_MS);
+  return pokedexIds;
+}
+
+async function getPokemonIdsForPokedex(pokedexId) {
+  const cacheKey = String(pokedexId || '');
+  const cached = readCache(pokedexPokemonCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const payload = await fetchFromPokeApi(`/pokedex/${encodeURIComponent(cacheKey)}`);
+  const ids = (payload?.pokemon_entries || [])
+    .map((entry) => extractIdFromUrl(entry?.pokemon_species?.url))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  writeCache(pokedexPokemonCache, cacheKey, ids, GAME_FILTER_SUMMARY_CACHE_TTL_MS);
+  return ids;
+}
+
+async function getAvailablePokemonIdsForGameFilter(gameFilterKey) {
+  const scope = getGameFilterScope(gameFilterKey);
+  if (scope.key === 'all') {
+    return null;
+  }
+
+  const cacheKey = scope.key;
+  const cached = readCache(gameFilterAvailabilityCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const versionGroupNames = Array.from(scope.versionGroups || []);
+  const pokedexLookupResults = await Promise.allSettled(
+    versionGroupNames.map((versionGroupName) => getPokedexIdsForVersionGroup(versionGroupName)),
+  );
+
+  const pokedexIds = new Set();
+  for (const result of pokedexLookupResults) {
+    if (result.status !== 'fulfilled') {
+      continue;
+    }
+
+    for (const pokedexId of result.value || []) {
+      pokedexIds.add(pokedexId);
+    }
+  }
+
+  const pokemonIdLookupResults = await Promise.allSettled(
+    Array.from(pokedexIds).map((pokedexId) => getPokemonIdsForPokedex(pokedexId)),
+  );
+
+  const availablePokemonIds = new Set();
+  for (const result of pokemonIdLookupResults) {
+    if (result.status !== 'fulfilled') {
+      continue;
+    }
+
+    for (const pokemonId of result.value || []) {
+      availablePokemonIds.add(pokemonId);
+    }
+  }
+
+  writeCache(gameFilterAvailabilityCache, cacheKey, availablePokemonIds, GAME_FILTER_SUMMARY_CACHE_TTL_MS);
+  return availablePokemonIds;
+}
+
+async function isPokemonAvailableInGameFilter(pokemonId, gameFilterKey) {
+  const normalizedPokemonId = Number(pokemonId || 0);
+  if (!Number.isFinite(normalizedPokemonId) || normalizedPokemonId <= 0) {
+    return false;
+  }
+
+  const availablePokemonIds = await getAvailablePokemonIdsForGameFilter(gameFilterKey);
+  if (!availablePokemonIds) {
+    return true;
+  }
+
+  return availablePokemonIds.has(normalizedPokemonId);
 }
 
 function getPokedexDescription(speciesPayload) {
@@ -520,7 +639,7 @@ function buildEncounterLocations(encountersPayload, versionScope) {
 }
 
 async function getPokemonTeamDetail(nameOrId, options = {}) {
-  const gameFilterKey = options.gameFilterKey || 'all';
+  const gameFilterKey = getNormalizedGameFilterKey(options.gameFilterKey || 'all');
   const cacheKey = `${String(nameOrId).toLowerCase()}|detail|${gameFilterKey}`;
   const cached = readCache(teamDetailCache, cacheKey);
 
@@ -529,6 +648,15 @@ async function getPokemonTeamDetail(nameOrId, options = {}) {
   }
 
   const pokemonDetail = await getPokemonByNameOrId(nameOrId);
+  const isAvailableInFilter = await isPokemonAvailableInGameFilter(pokemonDetail.id, gameFilterKey);
+  if (!isAvailableInFilter) {
+    const error = new Error(
+      `${toDisplayName(pokemonDetail.name)} is not available in the selected game filter.`,
+    );
+    error.statusCode = 404;
+    throw error;
+  }
+
   const species = pokemonDetail.speciesId ? await getSpeciesData(pokemonDetail.speciesId) : null;
   const evolutionLineId = extractIdFromUrl(species?.evolution_chain?.url);
 
@@ -560,6 +688,7 @@ async function getPokemonTeamDetail(nameOrId, options = {}) {
 
   const payload = {
     pokemon: pokemonDetail,
+    isAvailableInFilter,
     pokedexDescription: getPokedexDescription(species),
     abilityEffectsByName,
     evolution: {
@@ -657,39 +786,15 @@ function getGenerationNumberFromSpecies(species) {
   return match ? Number(match[1]) : null;
 }
 
-async function getPokemonSummariesForGeneration(generationNumber) {
-  const normalizedGenerationNumber = Number(generationNumber);
-  if (!Number.isFinite(normalizedGenerationNumber) || normalizedGenerationNumber <= 0) {
-    return [];
-  }
-
-  const cacheKey = String(normalizedGenerationNumber);
-  const cachedGenerationList = readCache(generationSummaryCache, cacheKey);
-  if (cachedGenerationList) {
-    return cachedGenerationList;
-  }
-
-  const generationPayload = await fetchFromPokeApi(`/generation/${encodeURIComponent(normalizedGenerationNumber)}`);
-  const normalized = (generationPayload?.pokemon_species || [])
-    .map((species) => ({
-      id: extractIdFromUrl(species?.url),
-      name: species?.name,
-    }))
-    .filter((entry) => entry.id && entry.name)
-    .sort((left, right) => left.id - right.id);
-
-  writeCache(generationSummaryCache, cacheKey, normalized, GENERATION_SUMMARY_CACHE_TTL_MS);
-  return normalized;
-}
-
-async function listPokemon({ search, limit = 20, offset = 0, generationNumber = null }) {
-  const normalizedGenerationNumber = Number(generationNumber) || null;
+async function listPokemon({ search, limit = 20, offset = 0, gameFilterKey = 'all' }) {
+  const normalizedGameFilterKey = getNormalizedGameFilterKey(gameFilterKey);
 
   if (search) {
     const pokemon = await getPokemonByNameOrId(search.toLowerCase());
 
-    if (normalizedGenerationNumber && pokemon.generationNumber !== normalizedGenerationNumber) {
-      const error = new Error(`Pokemon not found in Generation ${normalizedGenerationNumber}`);
+    const isAvailable = await isPokemonAvailableInGameFilter(pokemon.id, normalizedGameFilterKey);
+    if (!isAvailable) {
+      const error = new Error(`${toDisplayName(pokemon.name)} is not available in the selected game filter.`);
       error.statusCode = 404;
       throw error;
     }
@@ -697,7 +802,7 @@ async function listPokemon({ search, limit = 20, offset = 0, generationNumber = 
     return [pokemon];
   }
 
-  const cacheKey = `gen=${normalizedGenerationNumber || 'all'}:${limit}:${offset}`;
+  const cacheKey = `filter=${normalizedGameFilterKey}:${limit}:${offset}`;
   const cachedList = readCache(listCache, cacheKey);
   if (cachedList) {
     return cachedList;
@@ -705,9 +810,15 @@ async function listPokemon({ search, limit = 20, offset = 0, generationNumber = 
 
   let normalized = [];
 
-  if (normalizedGenerationNumber) {
-    const generationSummaries = await getPokemonSummariesForGeneration(normalizedGenerationNumber);
-    normalized = generationSummaries.slice(offset, offset + limit);
+  if (normalizedGameFilterKey !== 'all') {
+    const [allPokemon, availablePokemonIds] = await Promise.all([
+      getAllPokemonSummaries(),
+      getAvailablePokemonIdsForGameFilter(normalizedGameFilterKey),
+    ]);
+
+    normalized = allPokemon
+      .filter((entry) => availablePokemonIds.has(entry.id))
+      .slice(offset, offset + limit);
   } else {
     const listResponse = await fetchFromPokeApi(`/pokemon?limit=${limit}&offset=${offset}`);
     normalized = listResponse.results.map(normalizePokemonSummary);
@@ -836,18 +947,18 @@ async function listDefensiveCandidates({
   excludeIds = [],
   limit = 90,
   scanLimit = DEFAULT_SCAN_LIMIT,
-  generationNumber = null,
+  gameFilterKey = 'all',
 }) {
   const cappedScanLimit = Math.min(Math.max(Number(scanLimit) || DEFAULT_SCAN_LIMIT, 40), 400);
   const cappedLimit = Math.min(Math.max(Number(limit) || 90, 1), 120);
-  const normalizedGenerationNumber = Number(generationNumber) || null;
+  const normalizedGameFilterKey = getNormalizedGameFilterKey(gameFilterKey);
   const sortedWeakTypes = [...(weakTypes || [])].map((type) => String(type).toLowerCase()).sort((a, b) => a.localeCompare(b));
   const sortedExcludeIds = [...(excludeIds || [])]
     .map((value) => Number(value))
     .filter(Boolean)
     .sort((left, right) => left - right);
 
-  const cacheKey = `weak=${sortedWeakTypes.join(',')}|exclude=${sortedExcludeIds.join(',')}|limit=${cappedLimit}|scan=${cappedScanLimit}|gen=${normalizedGenerationNumber || 'all'}`;
+  const cacheKey = `weak=${sortedWeakTypes.join(',')}|exclude=${sortedExcludeIds.join(',')}|limit=${cappedLimit}|scan=${cappedScanLimit}|filter=${normalizedGameFilterKey}`;
   const cachedCandidates = readCache(defensiveCandidateCache, cacheKey);
   if (cachedCandidates) {
     return cachedCandidates;
@@ -858,7 +969,7 @@ async function listDefensiveCandidates({
   const summaries = await listPokemon({
     limit: cappedScanLimit,
     offset: 0,
-    generationNumber: normalizedGenerationNumber,
+    gameFilterKey: normalizedGameFilterKey,
   });
   const candidateIds = summaries
     .map((summary) => summary?.id)
@@ -914,5 +1025,6 @@ module.exports = {
   getPokemonByNameOrId,
   getPokemonTeamDetail,
   listDefensiveCandidates,
+  isPokemonAvailableInGameFilter,
   TYPE_CHART,
 };

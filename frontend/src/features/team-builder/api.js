@@ -104,9 +104,9 @@ export async function fetchJson(url, options = {}, cacheConfig = {}) {
   return payload
 }
 
-export function fetchPokemonList(limit = 1025, offset = 0, generationNumber = null) {
-  const generationPart = generationNumber ? `&generation=${generationNumber}` : ''
-  return fetchJson(`/api/pokemon?limit=${limit}&offset=${offset}${generationPart}`)
+export function fetchPokemonList(limit = 1025, offset = 0, gameFilterKey = 'all') {
+  const filterPart = gameFilterKey ? `&gameFilterKey=${encodeURIComponent(gameFilterKey)}` : ''
+  return fetchJson(`/api/pokemon?limit=${limit}&offset=${offset}${filterPart}`)
 }
 
 export function fetchPokemonDetail(nameOrId) {
@@ -129,8 +129,8 @@ export function fetchDefensiveSwapRecommendations({
   scanLimit = 240,
   generationFilter = {},
 }) {
-  const filterGenerationNumber = Number(generationFilter?.generationNumber) || 0
-  const filterEnabled = Boolean(generationFilter?.enabled) && filterGenerationNumber > 0
+  const gameFilterKey = String(generationFilter?.gameFilterKey || 'all')
+  const filterEnabled = Boolean(generationFilter?.enabled) && gameFilterKey !== 'all'
   const cacheKey = [
     'defensive-swaps',
     ...team
@@ -138,7 +138,7 @@ export function fetchDefensiveSwapRecommendations({
       .filter(Boolean)
       .sort((left, right) => left - right),
     `size${teamSizeTarget}`,
-    filterEnabled ? `g${filterGenerationNumber}` : 'all-gen',
+    filterEnabled ? `filter-${gameFilterKey}` : 'all-filter',
     topK,
     candidateLimit,
     scanLimit,
@@ -157,8 +157,8 @@ export function fetchDefensiveSwapRecommendations({
       scanLimit,
       generationFilter: {
         enabled: filterEnabled,
-        generationNumber: filterEnabled ? filterGenerationNumber : null,
-        gameFilterKey: generationFilter?.gameFilterKey ?? '',
+        generationNumber: null,
+        gameFilterKey,
         gameFilterLabel: generationFilter?.gameFilterLabel ?? '',
       },
     }),

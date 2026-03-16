@@ -77,7 +77,10 @@ function TeamDetailPage({ team, teamLimit }) {
           return
         }
 
-        setDetailData(null)
+        const isInspectingNonSelectedTarget = String(activePokemonQuery) !== String(selectedPokemonId)
+        if (!isInspectingNonSelectedTarget) {
+          setDetailData(null)
+        }
         setDetailError(error.message)
       } finally {
         if (isActive) {
@@ -91,7 +94,7 @@ function TeamDetailPage({ team, teamLimit }) {
     return () => {
       isActive = false
     }
-  }, [activePokemonQuery, isFilterSelected, selectedGameFilterKey, team])
+  }, [activePokemonQuery, isFilterSelected, selectedGameFilterKey, selectedPokemonId, team])
 
   const selectedPokemon = useMemo(
     () => team.find((pokemon) => pokemon.id === selectedPokemonId) ?? null,

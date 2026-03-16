@@ -113,10 +113,10 @@ function TeamAnalysisPage({ team, teamLimit }) {
           candidateLimit: RECOMMENDATION_CANDIDATE_LIMIT,
           scanLimit: RECOMMENDATION_SOURCE_MAX_SCAN,
           generationFilter: {
-            enabled: Boolean(selectedGameFilter?.generationNumber),
+            enabled: selectedGameFilterKey !== DEFAULT_GAME_FILTER_KEY,
             gameFilterKey: selectedGameFilterKey,
             gameFilterLabel: selectedGameFilter?.label ?? '',
-            generationNumber: selectedGameFilter?.generationNumber ?? null,
+            generationNumber: null,
           },
         })
         const recommendations = payload.data ?? []
