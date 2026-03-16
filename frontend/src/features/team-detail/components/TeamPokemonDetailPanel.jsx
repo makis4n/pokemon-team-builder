@@ -25,7 +25,7 @@ function TeamPokemonDetailPanel({
       : 'Select a filter to view this Pokemon\'s Pokedex description.')
   const abilityEffectsByName = detailData?.abilityEffectsByName || {}
   const detailPayload = detailData || {}
-  const shouldRenderContent = !isFilterSelected || Boolean(detailData) || isLoading || !error
+  const shouldRenderContent = !isLoading && (!isFilterSelected || Boolean(detailData) || !error)
   const [moveDetailByRawName, setMoveDetailByRawName] = useState({})
   const [moveDetailsLoadingByRawName, setMoveDetailsLoadingByRawName] = useState({})
   const moveHoverTimersRef = useRef(new Map())
@@ -281,7 +281,7 @@ function TeamPokemonDetailPanel({
                     onMouseLeave={() => onEvolutionPreviewCancel?.(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
                     onFocus={() => onEvolutionPreviewStart?.(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
                     onBlur={() => onEvolutionPreviewCancel?.(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
-                    onClick={() => onInspectPokemon(detailPayload.evolution.from.speciesId || detailPayload.evolution.from.speciesName)}
+                    onClick={() => onInspectPokemon(detailPayload.evolution.from.speciesName || detailPayload.evolution.from.speciesId)}
                   >
                     <strong>Evolves from:</strong> {detailPayload.evolution.from.speciesName} ({detailPayload.evolution.from.condition})
                   </button>
@@ -300,7 +300,7 @@ function TeamPokemonDetailPanel({
                       onMouseLeave={() => onEvolutionPreviewCancel?.(entry.speciesId || entry.speciesName)}
                       onFocus={() => onEvolutionPreviewStart?.(entry.speciesId || entry.speciesName)}
                       onBlur={() => onEvolutionPreviewCancel?.(entry.speciesId || entry.speciesName)}
-                      onClick={() => onInspectPokemon(entry.speciesId || entry.speciesName)}
+                      onClick={() => onInspectPokemon(entry.speciesName || entry.speciesId)}
                     >
                       <strong>Evolves to:</strong> {entry.speciesName} ({entry.condition})
                     </button>

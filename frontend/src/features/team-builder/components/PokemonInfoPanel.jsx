@@ -28,7 +28,7 @@ function PokemonInfoPanel({
         <p className="state-text">Choose a Pokemon from the left panel to inspect details.</p>
       )}
 
-      {selectedPokemon && (
+      {!isDetailLoading && selectedPokemon && (
         <article className="pokemon-card">
           <div className="pokemon-card-head">
             <div className="pokemon-card-sprite">

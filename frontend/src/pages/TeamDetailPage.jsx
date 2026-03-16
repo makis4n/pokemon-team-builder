@@ -170,15 +170,30 @@ function TeamDetailPage({ team, teamLimit }) {
     [selectedPokemonId, team],
   )
 
-  const displayedPokemon = useMemo(
-    () => (detailDataQuery === String(activePokemonQuery) ? detailData?.pokemon : null) ?? selectedPokemon,
-    [activePokemonQuery, detailData, detailDataQuery, selectedPokemon],
-  )
+  const displayedPokemon = useMemo(() => {
+    if (detailDataQuery === String(activePokemonQuery)) {
+      return detailData?.pokemon ?? selectedPokemon
+    }
 
-  const activeDetailData = useMemo(
-    () => (detailDataQuery === String(activePokemonQuery) ? detailData : null),
-    [activePokemonQuery, detailData, detailDataQuery],
-  )
+    // Preserve the last successful card when an inspect target fails (e.g., unavailable in filter).
+    if (detailError && detailData?.pokemon) {
+      return detailData.pokemon
+    }
+
+    return selectedPokemon
+  }, [activePokemonQuery, detailData, detailDataQuery, detailError, selectedPokemon])
+
+  const activeDetailData = useMemo(() => {
+    if (detailDataQuery === String(activePokemonQuery)) {
+      return detailData
+    }
+
+    if (detailError && detailData) {
+      return detailData
+    }
+
+    return null
+  }, [activePokemonQuery, detailData, detailDataQuery, detailError])
 
   const loadingTargetLabel = useMemo(() => {
     if (!isLoading || !activePokemonQuery) {
