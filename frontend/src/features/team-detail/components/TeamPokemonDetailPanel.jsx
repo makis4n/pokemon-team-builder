@@ -1,13 +1,34 @@
+import { useEffect, useState } from 'react'
+import { fetchMoveDetail } from '../../team-builder/api'
+
 function TeamPokemonDetailPanel({
   isFilterSelected,
   selectedPokemon,
   detailData,
   isLoading,
+  loadingTargetLabel,
   error,
   canGoBack,
   onGoBack,
   onInspectPokemon,
 }) {
+  const filterPromptText = 'Select a filter to view Pokemon details.'
+  const isAvailabilityError = String(error || '').toLowerCase().includes('not available in the selected game filter')
+  const pokedexDescription = detailData?.pokedexDescription
+    || (isFilterSelected
+      ? 'No Pokedex description available for this Pokemon.'
+      : 'Select a filter to view this Pokemon\'s Pokedex description.')
+  const abilityEffectsByName = detailData?.abilityEffectsByName || {}
+  const detailPayload = detailData || {}
+  const shouldRenderContent = !isFilterSelected || Boolean(detailData) || isLoading || !error
+  const [moveDetailByRawName, setMoveDetailByRawName] = useState({})
+  const [moveDetailsLoadingByRawName, setMoveDetailsLoadingByRawName] = useState({})
+
+  useEffect(() => {
+    setMoveDetailByRawName({})
+    setMoveDetailsLoadingByRawName({})
+  }, [selectedPokemon?.id, detailData])
+
   if (!selectedPokemon) {
     return (
       <section className="pixel-panel">
@@ -17,16 +38,6 @@ function TeamPokemonDetailPanel({
     )
   }
 
-  const filterPromptText = 'Select a filter to view Pokemon details.'
-  const isAvailabilityError = String(error || '').toLowerCase().includes('not available in the selected game filter')
-  const pokedexDescription = detailData?.pokedexDescription
-    || (isFilterSelected
-      ? 'No Pokedex description available for this Pokemon.'
-      : 'Select a filter to view this Pokemon\'s Pokedex description.')
-  const abilityEffectsByName = detailData?.abilityEffectsByName || {}
-  const detailPayload = detailData || {}
-  const shouldRenderContent = !isFilterSelected || (!isLoading && (!error || Boolean(detailData)))
-
   function formatDisplayName(value) {
     return String(value || '')
       .split('-')
@@ -34,11 +45,62 @@ function TeamPokemonDetailPanel({
       .join(' ')
   }
 
+  function getMoveRawName(move) {
+    if (move?.moveRawName) {
+      return String(move.moveRawName).toLowerCase()
+    }
+
+    return String(move?.moveName || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+  }
+
+  async function ensureMoveDetailLoaded(move) {
+    const moveRawName = getMoveRawName(move)
+    if (!moveRawName) {
+      return
+    }
+
+    if (moveDetailByRawName[moveRawName] || moveDetailsLoadingByRawName[moveRawName]) {
+      return
+    }
+
+    setMoveDetailsLoadingByRawName((current) => ({
+      ...current,
+      [moveRawName]: true,
+    }))
+
+    try {
+      const payload = await fetchMoveDetail(moveRawName)
+      setMoveDetailByRawName((current) => ({
+        ...current,
+        [moveRawName]: payload?.data ?? null,
+      }))
+    } catch {
+      setMoveDetailByRawName((current) => ({
+        ...current,
+        [moveRawName]: null,
+      }))
+    } finally {
+      setMoveDetailsLoadingByRawName((current) => ({
+        ...current,
+        [moveRawName]: false,
+      }))
+    }
+  }
+
   return (
     <section className="pixel-panel">
       <h2>Pokemon Details</h2>
 
-      {isFilterSelected && isLoading && <p className="state-text">Loading detailed info...</p>}
+      {isFilterSelected && isLoading && (
+        <p className="state-text">
+          {loadingTargetLabel
+            ? `Loading ${loadingTargetLabel}...`
+            : 'Loading detailed info...'}
+        </p>
+      )}
       {isFilterSelected && !isLoading && error && (
         <p className="state-text error">
           {isAvailabilityError
@@ -152,40 +214,68 @@ function TeamPokemonDetailPanel({
 
             {isFilterSelected && detailPayload.levelUpMoves?.length > 0 && (
               <ul className="team-detail-list team-move-list">
-                {detailPayload.levelUpMoves.map((move) => (
-                  <li key={`${selectedPokemon.id}-move-${move.moveName}`} className="team-move-entry">
-                    <details className="team-move-dropdown">
-                      <summary className="team-move-row">
-                        <span>
-                          <strong>Lv {move.level}:</strong> {move.moveName}
-                        </span>
-                        <span className="team-move-summary-right">
-                          <span className="team-move-arrow" aria-hidden="true" />
-                          <span className={`type-badge type-${move.moveType || 'unknown'}`}>
-                            {move.moveType || 'unknown'}
-                          </span>
-                        </span>
-                      </summary>
-                      <div className="team-move-expanded">
-                        <section className="team-move-panel" aria-label="Move effect panel">
-                          <p className="team-move-panel-title">Effect</p>
-                          <ul className="team-move-meta-list" aria-label="Move stats">
-                            <li><span>Category</span><strong>{move.category || 'Unknown'}</strong></li>
-                            <li><span>Power</span><strong>{move.basePower ?? 'N/A'}</strong></li>
-                            <li><span>Accuracy</span><strong>{move.accuracy ?? 'N/A'}</strong></li>
-                            <li><span>PP</span><strong>{move.pp ?? 'N/A'}</strong></li>
-                          </ul>
-                        </section>
+                {detailPayload.levelUpMoves.map((move) => {
+                  const moveRawName = getMoveRawName(move)
+                  const lazyMoveDetail = moveDetailByRawName[moveRawName]
+                  const isMoveDetailLoading = Boolean(moveDetailsLoadingByRawName[moveRawName])
+                  const resolvedMove = {
+                    ...move,
+                    moveType: move.moveType ?? lazyMoveDetail?.moveType ?? null,
+                    category: move.category ?? lazyMoveDetail?.category ?? null,
+                    basePower: move.basePower ?? lazyMoveDetail?.basePower ?? null,
+                    accuracy: move.accuracy ?? lazyMoveDetail?.accuracy ?? null,
+                    pp: move.pp ?? lazyMoveDetail?.pp ?? null,
+                    flavorText: move.flavorText ?? lazyMoveDetail?.flavorText ?? null,
+                    effectText: move.effectText ?? lazyMoveDetail?.effectText ?? null,
+                  }
 
-                        <section className="team-move-panel team-move-description-panel" aria-label="Move description panel">
-                          <p className="team-move-panel-title">Description</p>
-                          <p className="team-move-flavor">{move.flavorText || 'No flavor text available.'}</p>
-                          <p className="team-move-effect">{move.effectText || 'No move effect description available.'}</p>
-                        </section>
-                      </div>
-                    </details>
-                  </li>
-                ))}
+                  return (
+                    <li key={`${selectedPokemon.id}-move-${move.moveName}`} className="team-move-entry">
+                      <details
+                        className="team-move-dropdown"
+                        onToggle={(event) => {
+                          if (event.currentTarget.open) {
+                            void ensureMoveDetailLoaded(move)
+                          }
+                        }}
+                      >
+                        <summary className="team-move-row">
+                          <span>
+                            <strong>Lv {resolvedMove.level}:</strong> {resolvedMove.moveName}
+                          </span>
+                          <span className="team-move-summary-right">
+                            <span className="team-move-arrow" aria-hidden="true" />
+                          </span>
+                        </summary>
+                        <div className="team-move-expanded">
+                          <section className="team-move-panel" aria-label="Move effect panel">
+                            <div className="team-move-panel-title-row">
+                              <p className="team-move-panel-title">Effect</p>
+                              {resolvedMove.moveType && (
+                                <span className={`type-badge team-move-panel-type-badge type-${resolvedMove.moveType}`}>
+                                  {resolvedMove.moveType}
+                                </span>
+                              )}
+                            </div>
+                            {isMoveDetailLoading && <p className="team-detail-meta">Loading move details...</p>}
+                            <ul className="team-move-meta-list" aria-label="Move stats">
+                              <li><span>Category</span><strong>{resolvedMove.category || 'Unknown'}</strong></li>
+                              <li><span>Power</span><strong>{resolvedMove.basePower ?? 'N/A'}</strong></li>
+                              <li><span>Accuracy</span><strong>{resolvedMove.accuracy ?? 'N/A'}</strong></li>
+                              <li><span>PP</span><strong>{resolvedMove.pp ?? 'N/A'}</strong></li>
+                            </ul>
+                          </section>
+
+                          <section className="team-move-panel team-move-description-panel" aria-label="Move description panel">
+                            <p className="team-move-panel-title">Description</p>
+                            <p className="team-move-flavor">{resolvedMove.flavorText || 'No flavor text available.'}</p>
+                            <p className="team-move-effect">{resolvedMove.effectText || 'No move effect description available.'}</p>
+                          </section>
+                        </div>
+                      </details>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>

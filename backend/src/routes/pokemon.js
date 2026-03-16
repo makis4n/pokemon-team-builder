@@ -3,6 +3,7 @@ const {
   listPokemon,
   getPokemonByNameOrId,
   getPokemonTeamDetail,
+  getMoveDetail,
   listDefensiveCandidates,
   isPokemonAvailableInGameFilter,
 } = require('../services/pokeapi');
@@ -219,10 +220,24 @@ pokemonRouter.post('/team-defense-analysis', async (req, res, next) => {
   }
 });
 
+pokemonRouter.get('/moves/:moveName', async (req, res, next) => {
+  try {
+    const moveName = String(req.params.moveName || '').trim();
+    const data = await getMoveDetail(moveName);
+    res.status(200).json({ data });
+  } catch (error) {
+    next(error);
+  }
+});
+
 pokemonRouter.get('/:nameOrId/team-detail', async (req, res, next) => {
   try {
     const gameFilterKey = String(req.query.gameFilterKey || 'all');
-    const data = await getPokemonTeamDetail(req.params.nameOrId, { gameFilterKey });
+    const includeMoveDetails = String(req.query.includeMoveDetails || 'true').toLowerCase() !== 'false';
+    const data = await getPokemonTeamDetail(req.params.nameOrId, {
+      gameFilterKey,
+      includeMoveDetails,
+    });
     res.status(200).json({ data });
   } catch (error) {
     next(error);

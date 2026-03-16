@@ -269,6 +269,30 @@ async function isPokemonAvailableInGameFilter(pokemonId, gameFilterKey) {
   return availablePokemonIds.has(normalizedPokemonId);
 }
 
+async function warmGameFilterAvailabilityCache(filterKeys = []) {
+  const normalizedFilterKeys = Array.isArray(filterKeys) && filterKeys.length > 0
+    ? filterKeys.map((key) => getNormalizedGameFilterKey(key)).filter((key) => key !== 'all')
+    : Object.keys(GAME_FILTER_VERSION_GROUPS).filter((key) => key !== 'all');
+
+  const uniqueFilterKeys = Array.from(new Set(normalizedFilterKeys));
+  if (!uniqueFilterKeys.length) {
+    return {
+      warmedFilters: 0,
+      failedFilters: 0,
+    };
+  }
+
+  const results = await Promise.allSettled(
+    uniqueFilterKeys.map((filterKey) => getAvailablePokemonIdsForGameFilter(filterKey)),
+  );
+
+  const failedFilters = results.filter((result) => result.status !== 'fulfilled').length;
+  return {
+    warmedFilters: uniqueFilterKeys.length - failedFilters,
+    failedFilters,
+  };
+}
+
 function getPokedexDescription(speciesPayload) {
   const englishEntry = (speciesPayload?.flavor_text_entries || []).find(
     (entry) => entry?.language?.name === 'en' && entry?.flavor_text,
@@ -506,7 +530,8 @@ async function getMoveDetail(moveName) {
   }
 }
 
-async function buildLevelUpMoves(pokemonPayload, versionGroupScope) {
+async function buildLevelUpMoves(pokemonPayload, versionGroupScope, options = {}) {
+  const includeMoveDetails = options.includeMoveDetails !== false;
   const bestByMove = new Map();
 
   for (const moveEntry of pokemonPayload?.moves || []) {
@@ -541,6 +566,30 @@ async function buildLevelUpMoves(pokemonPayload, versionGroupScope) {
   }
 
   const moveEntries = Array.from(bestByMove.values());
+
+  if (!includeMoveDetails) {
+    return moveEntries
+      .map((entry) => ({
+        moveName: entry.moveName,
+        moveRawName: entry.moveRawName,
+        level: entry.level,
+        versionGroupName: entry.versionGroupName,
+        moveType: null,
+        category: null,
+        basePower: null,
+        accuracy: null,
+        pp: null,
+        flavorText: null,
+        effectText: null,
+      }))
+      .sort((left, right) => {
+        if (left.level !== right.level) {
+          return left.level - right.level;
+        }
+        return left.moveName.localeCompare(right.moveName);
+      });
+  }
+
   const moveDetailLookups = await Promise.allSettled(
     moveEntries.map((entry) => getMoveDetail(entry.moveRawName)),
   );
@@ -640,7 +689,9 @@ function buildEncounterLocations(encountersPayload, versionScope) {
 
 async function getPokemonTeamDetail(nameOrId, options = {}) {
   const gameFilterKey = getNormalizedGameFilterKey(options.gameFilterKey || 'all');
-  const cacheKey = `${String(nameOrId).toLowerCase()}|detail|${gameFilterKey}`;
+  const includeMoveDetails = options.includeMoveDetails !== false;
+  const detailMode = includeMoveDetails ? 'full' : 'summary';
+  const cacheKey = `${String(nameOrId).toLowerCase()}|detail|${gameFilterKey}|${detailMode}`;
   const cached = readCache(teamDetailCache, cacheKey);
 
   if (cached) {
@@ -695,7 +746,7 @@ async function getPokemonTeamDetail(nameOrId, options = {}) {
       from: evolutionEntries.from,
       to: evolutionEntries.to,
     },
-    levelUpMoves: await buildLevelUpMoves(pokemonPayload, scope.versionGroups),
+    levelUpMoves: await buildLevelUpMoves(pokemonPayload, scope.versionGroups, { includeMoveDetails }),
     encounters: buildEncounterLocations(encountersPayload, scope.versions),
   };
 
@@ -1024,7 +1075,9 @@ module.exports = {
   listPokemon,
   getPokemonByNameOrId,
   getPokemonTeamDetail,
+  getMoveDetail,
   listDefensiveCandidates,
   isPokemonAvailableInGameFilter,
+  warmGameFilterAvailabilityCache,
   TYPE_CHART,
 };

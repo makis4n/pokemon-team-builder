@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const pokemonRouter = require('./src/routes/pokemon');
+const { warmGameFilterAvailabilityCache } = require('./src/services/pokeapi');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -43,4 +44,13 @@ app.use((error, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`Backend server is running at http://localhost:${PORT}`);
+
+  // Warm filter availability caches in the background to speed up first Team Details/filter hits.
+  void warmGameFilterAvailabilityCache()
+    .then(({ warmedFilters, failedFilters }) => {
+      console.log(`Availability cache warmup complete: ${warmedFilters} warmed, ${failedFilters} failed.`);
+    })
+    .catch((error) => {
+      console.warn(`Availability cache warmup failed: ${error.message}`);
+    });
 });

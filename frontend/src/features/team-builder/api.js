@@ -113,9 +113,20 @@ export function fetchPokemonDetail(nameOrId) {
   return fetchJson(`/api/pokemon/${encodeURIComponent(nameOrId)}`)
 }
 
-export function fetchPokemonTeamDetail(nameOrId, gameFilterKey = 'all') {
-  const cacheKey = `team-detail:${String(nameOrId).toLowerCase()}:${gameFilterKey}`
-  return fetchJson(`/api/pokemon/${encodeURIComponent(nameOrId)}/team-detail?gameFilterKey=${encodeURIComponent(gameFilterKey)}`, {}, {
+export function fetchPokemonTeamDetail(nameOrId, gameFilterKey = 'all', options = {}) {
+  const includeMoveDetails = options?.includeMoveDetails !== false
+  const detailMode = includeMoveDetails ? 'full' : 'summary'
+  const cacheKey = `team-detail:${String(nameOrId).toLowerCase()}:${gameFilterKey}:${detailMode}`
+  return fetchJson(`/api/pokemon/${encodeURIComponent(nameOrId)}/team-detail?gameFilterKey=${encodeURIComponent(gameFilterKey)}&includeMoveDetails=${includeMoveDetails}`, {}, {
+    enabled: true,
+    cacheKey,
+  })
+}
+
+export function fetchMoveDetail(moveName) {
+  const normalizedMoveName = String(moveName || '').trim().toLowerCase()
+  const cacheKey = `move-detail:${normalizedMoveName}`
+  return fetchJson(`/api/pokemon/moves/${encodeURIComponent(normalizedMoveName)}`, {}, {
     enabled: true,
     cacheKey,
   })
