@@ -49,6 +49,31 @@
   color: var(--ink);
 }
 
+.game-filter-wrap {
+  margin: 0 0 0.62rem;
+  padding: 0.34rem;
+  border: 2px dashed var(--ink);
+  background: #fff7df;
+}
+
+.game-filter-label {
+  display: block;
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  margin-bottom: 0.26rem;
+  color: #242424;
+}
+
+.game-filter-select {
+  width: 100%;
+  border: 3px solid var(--ink);
+  background: #ffffff;
+  color: #1f1f1f;
+  font-family: var(--pixel-font);
+  font-size: 0.58rem;
+  padding: 0.28rem 0.34rem;
+}
+
 .search-form {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -575,6 +600,14 @@
   line-height: 1.35;
 }
 
+.defensive-insight-positive {
+  border: 1px solid #1f7c32;
+  background: #dcf5e2;
+  color: #135423;
+  padding: 0.22rem 0.3rem;
+  line-height: 1.35;
+}
+
 .swap-recommendations-wrap {
   margin-top: 0.45rem;
   border-top: 1px solid #e3d7b4;
@@ -587,8 +620,12 @@
   text-transform: uppercase;
 }
 
+.recommendation-toggle-button {
+  margin-top: 0;
+}
+
 .swap-recommendations-state {
-  margin: 0;
+  margin: 0.35rem 0 0;
   font-size: 0.52rem;
   color: #333333;
 }
@@ -686,28 +723,22 @@
   padding: 0.2rem 0.28rem;
 }
 
-.swap-reason-tag.severe {
-  background: #e6f7e8;
-  border-color: #2d7a3f;
-  color: #1f5a2f;
+.swap-reason-tag.improvement-high {
+  background: #dcf5e2;
+  border-color: #1f7c32;
+  color: #135423;
 }
 
-.swap-reason-tag.coverage-gaps {
-  background: #dff3dc;
-  border-color: #2f7d35;
-  color: #1f5a2b;
+.swap-reason-tag.improvement-medium {
+  background: #fff4c4;
+  border-color: #b98a1d;
+  color: #5c4308;
 }
 
-.swap-reason-tag.adds-cover {
-  background: #d4efdc;
-  border-color: #216a33;
-  color: #144726;
-}
-
-.swap-reason-tag.pressure-relief {
-  background: #e1f4e6;
-  border-color: #2a7a3a;
-  color: #1a5328;
+.swap-reason-tag.improvement-low {
+  background: #ffe6bf;
+  border-color: #c46c1a;
+  color: #6b3200;
 }
 
 .role-insights-wrap {

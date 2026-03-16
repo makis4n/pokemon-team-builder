@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 function AnalysisOverviewPanel({
   activeRadarConfig,
   radarData,
@@ -10,6 +12,8 @@ function AnalysisOverviewPanel({
   isRecommendationsLoading,
   recommendationsError,
 }) {
+  const [isRecommendationsVisible, setIsRecommendationsVisible] = useState(false)
+
   function splitReasonParts(reason) {
     if (!reason) {
       return []
@@ -43,26 +47,42 @@ function AnalysisOverviewPanel({
     return normalizedParts
   }
 
-  function getReasonTone(part) {
+  function getImprovementWeight(part) {
     const normalizedPart = part.toLowerCase()
+    const transitionRegex = /(\d+)\s*->\s*(\d+)/g
+    let totalReduction = 0
+    let match = transitionRegex.exec(part)
 
-    if (normalizedPart.startsWith('severe weak')) {
-      return 'severe'
+    while (match) {
+      const before = Number(match[1])
+      const after = Number(match[2])
+      totalReduction += Math.max(0, before - after)
+      match = transitionRegex.exec(part)
     }
 
-    if (normalizedPart.startsWith('coverage gaps')) {
-      return 'coverage-gaps'
+    if (normalizedPart.includes('adds ')) {
+      totalReduction += 1
     }
 
-    if (normalizedPart.startsWith('adds cover')) {
-      return 'adds-cover'
+    if (normalizedPart.startsWith('pressure relief') && totalReduction === 0) {
+      totalReduction += 1
     }
 
-    if (normalizedPart.startsWith('pressure relief')) {
-      return 'pressure-relief'
+    return totalReduction
+  }
+
+  function getImprovementClass(part) {
+    const weight = getImprovementWeight(part)
+
+    if (weight >= 3) {
+      return 'improvement-high'
     }
 
-    return 'default'
+    if (weight >= 1) {
+      return 'improvement-medium'
+    }
+
+    return 'improvement-low'
   }
 
   return (
@@ -177,7 +197,10 @@ function AnalysisOverviewPanel({
                 <h3>Defensive Insights</h3>
                 <ul className="defensive-insights-list">
                   {defensiveInsights.map((insight) => (
-                    <li className="defensive-insight-warning" key={`defensive-insight-${insight.key}`}>
+                    <li
+                      className={insight.key === 'immunity' ? 'defensive-insight-positive' : 'defensive-insight-warning'}
+                      key={`defensive-insight-${insight.key}`}
+                    >
                       {insight.message}
                     </li>
                   ))}
@@ -188,19 +211,27 @@ function AnalysisOverviewPanel({
             <section className="swap-recommendations-wrap" aria-label="Defensive swap recommendations">
               <h3>Recommended Swaps</h3>
 
-              {isRecommendationsLoading && (
+              <button
+                type="button"
+                className="analysis-nav-button recommendation-toggle-button"
+                onClick={() => setIsRecommendationsVisible((current) => !current)}
+              >
+                {isRecommendationsVisible ? 'Hide Recommendations' : 'Show Recommendations'}
+              </button>
+
+              {isRecommendationsVisible && isRecommendationsLoading && (
                 <p className="swap-recommendations-state">Scanning candidate pool for defensive upgrades...</p>
               )}
 
-              {!isRecommendationsLoading && recommendationsError && (
+              {isRecommendationsVisible && !isRecommendationsLoading && recommendationsError && (
                 <p className="swap-recommendations-state error">Could not generate recommendations: {recommendationsError}</p>
               )}
 
-              {!isRecommendationsLoading && !recommendationsError && swapRecommendations.length === 0 && (
+              {isRecommendationsVisible && !isRecommendationsLoading && !recommendationsError && swapRecommendations.length === 0 && (
                 <p className="swap-recommendations-state">No positive defensive swap found from the current candidate pool.</p>
               )}
 
-              {!isRecommendationsLoading && !recommendationsError && swapRecommendations.length > 0 && (
+              {isRecommendationsVisible && !isRecommendationsLoading && !recommendationsError && swapRecommendations.length > 0 && (
                 <ul className="swap-recommendations-list">
                   {swapRecommendations.map((recommendation) => (
                     <li className="swap-recommendation-card" key={`${recommendation.outgoingPokemonName}-${recommendation.incomingPokemonId}`}>
@@ -222,7 +253,7 @@ function AnalysisOverviewPanel({
                           {splitReasonParts(recommendation.reason).map((part) => (
                             <span
                               key={`${recommendation.incomingPokemonId}-${part}`}
-                              className={`swap-reason-tag ${getReasonTone(part)}`}
+                              className={`swap-reason-tag ${getImprovementClass(part)}`}
                             >
                               {part}
                             </span>

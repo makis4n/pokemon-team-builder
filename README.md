@@ -26,25 +26,43 @@ Backend endpoints used by the frontend:
 
 - Search and add Pokemon to a 6-member team
 - View Pokemon details (types, abilities, base stats)
+- Filter Pokemon by official game group (mapped to generation)
 - Team Analysis page with:
   - stat/role radar
   - type weakness summary bars
   - defensive insight warnings
   - recommended defensive swaps
 
+## Game Filter Behavior
+
+The Team Builder includes a **Game Filter** dropdown.
+Each game group maps to a Pokemon generation (Gen 1 to Gen 9).
+
+How it works:
+
+1. If no generation filter is selected (All Games), the Select Pokemon list shows up to 50 Pokemon.
+2. If a generation-based game filter is selected, the Select Pokemon list shows all Pokemon from that generation.
+3. The selected filter is saved in session storage and restored when you come back.
+4. Pokemon details are checked against the selected generation, so out-of-generation picks are blocked.
+
+How it affects recommendations:
+
+1. Defensive swap recommendations are generated only from the selected generation when a filter is active.
+2. If your current team contains Pokemon outside the selected generation, recommendations are blocked and an error is shown until the team/filter is fixed.
+
 ## Example Images
 
 ### Team Builder
 
-![Team Builder example](frontend/src/assets/team_builder_example.png)
+![Team Builder example](frontend/src/assets/team_builder_v0.2.png)
 
 ### Team Analysis
 
-![Team Analysis example](frontend/src/assets/team_analysis_example.png)
+![Team Analysis example](frontend/src/assets/team_analysis_v0.2.png)
 
 ### Team Recommendations
 
-![Recommended Swaps example](frontend/src/assets/recommended_swaps_example.png)
+![Recommended Swaps example](frontend/src/assets/recommendations_v0.2.png)
 
 ## Rough Calculation Logic
 
@@ -69,16 +87,23 @@ Team role radar is then built from all assigned roles and role-score distributio
 
 ### Recommended Defensive Swaps (backend)
 
-For each team slot, the backend simulates replacing that Pokemon with candidate Pokemon and compares before/after defensive metrics.
+At a high level, the backend does this:
 
-The recommendation score mainly rewards:
+1. Finds your team's top weakness types.
+2. Pulls a candidate pool from PokeAPI that can help cover those weaknesses.
+3. Keeps only one Pokemon per evolution line in that pool (prefers the highest-stage evolution).
+4. Simulates swaps for each team slot and scores each "old -> new" option.
+5. Builds the final list with unique incoming Pokemon for the top recommendations.
+   - If duplicate incoming targets appear while filling the top 5, they are merged into one entry (with multiple possible outgoing Pokemon).
+
+The score rewards swaps that improve team defense, especially:
 
 - fewer severe shared weaknesses
-- fewer uncovered attacking types
-- fewer 4x-risk members
-- lower weighted overall weakness pressure
+- fewer uncovered attacking types (no resist/immunity)
+- fewer team members with 4x weaknesses
+- lower overall weakness pressure across attacking types
 
-If swaps tie on defensive improvement, average base stat gain (new Pokemon minus old Pokemon) is used to break ties, and now also contributes a small amount to the final score.
+Average base stat gain (new minus old) is a small bonus/tie-breaker, not the main driver.
 
 ## Run Locally
 

@@ -1,18 +1,37 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchPokemonDetail, fetchPokemonList } from '../features/team-builder/api'
-import { statLabels } from '../features/team-builder/constants'
+import {
+  DEFAULT_GAME_FILTER_KEY,
+  GENERATION_POKEDEX_RANGES,
+  GAME_FILTER_OPTION_BY_KEY,
+  GAME_FILTER_OPTIONS,
+  statLabels,
+} from '../features/team-builder/constants'
+import {
+  getSelectedGameFilterFromSession,
+  saveSelectedGameFilterToSession,
+} from '../features/team-builder/storage'
 import CurrentTeamPanel from '../features/team-builder/components/CurrentTeamPanel'
 import PokemonInfoPanel from '../features/team-builder/components/PokemonInfoPanel'
 import PokemonSelectorPanel from '../features/team-builder/components/PokemonSelectorPanel'
 
 function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonFromTeam }) {
   const [allPokemon, setAllPokemon] = useState([])
+  const [selectedGameFilterKey, setSelectedGameFilterKey] = useState(() => getSelectedGameFilterFromSession())
   const [query, setQuery] = useState('')
   const [selectedPokemon, setSelectedPokemon] = useState(null)
   const [isListLoading, setIsListLoading] = useState(true)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [listError, setListError] = useState('')
   const [detailError, setDetailError] = useState('')
+
+  const selectedGameFilter = GAME_FILTER_OPTION_BY_KEY[selectedGameFilterKey]
+    ?? GAME_FILTER_OPTION_BY_KEY[DEFAULT_GAME_FILTER_KEY]
+  const selectedGenerationNumber = selectedGameFilter?.generationNumber ?? null
+
+  useEffect(() => {
+    saveSelectedGameFilterToSession(selectedGameFilterKey)
+  }, [selectedGameFilterKey])
 
   useEffect(() => {
     let isActive = true
@@ -23,7 +42,7 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
 
       try {
         /* Limit to 9999 so that no special forms are shown */
-        const payload = await fetchPokemonList(1025)
+        const payload = await fetchPokemonList(1025, 0, selectedGenerationNumber)
 
         if (!isActive) {
           return
@@ -48,19 +67,30 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
     return () => {
       isActive = false
     }
-  }, [])
+  }, [selectedGenerationNumber])
 
   const filteredPokemon = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
+    const generationRange = selectedGenerationNumber
+      ? GENERATION_POKEDEX_RANGES[selectedGenerationNumber]
+      : null
 
-    if (!normalizedQuery) {
-      return allPokemon.slice(0, 50)
+    const generationFilteredPokemon = generationRange
+      ? allPokemon.filter((pokemon) => (
+        pokemon.id >= generationRange.startId && pokemon.id <= generationRange.endId
+      ))
+      : allPokemon
+
+    const queryFilteredPokemon = normalizedQuery
+      ? generationFilteredPokemon.filter((pokemon) => pokemon.name.startsWith(normalizedQuery))
+      : generationFilteredPokemon
+
+    if (!selectedGenerationNumber) {
+      return queryFilteredPokemon.slice(0, 50)
     }
 
-    return allPokemon
-      .filter((pokemon) => pokemon.name.startsWith(normalizedQuery))
-      .slice(0, 50)
-  }, [allPokemon, query])
+    return queryFilteredPokemon
+  }, [allPokemon, query, selectedGenerationNumber])
 
   const teamIds = useMemo(() => new Set(team.map((pokemon) => pokemon.id)), [team])
 
@@ -74,7 +104,20 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
 
     try {
       const payload = await fetchPokemonDetail(nameOrId)
-      setSelectedPokemon(payload.data)
+      const nextPokemon = payload.data
+
+      if (
+        selectedGenerationNumber
+        && nextPokemon?.generationNumber !== selectedGenerationNumber
+      ) {
+        setSelectedPokemon(null)
+        setDetailError(
+          `This Pokemon is not from ${selectedGameFilter.label}. Choose a Pokemon from Gen ${selectedGenerationNumber}.`,
+        )
+        return
+      }
+
+      setSelectedPokemon(nextPokemon)
     } catch (error) {
       setDetailError(error.message)
     } finally {
@@ -102,6 +145,12 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
     loadPokemonDetail(query.trim().toLowerCase())
   }
 
+  function handleGameFilterChange(nextGameFilterKey) {
+    setSelectedGameFilterKey(nextGameFilterKey)
+    setSelectedPokemon(null)
+    setDetailError('')
+  }
+
   return (
     <main className="app-shell">
       <header className="top-banner">
@@ -113,6 +162,9 @@ function TeamBuilderPage({ team, teamLimit, onAddPokemonToTeam, onRemovePokemonF
           query={query}
           onQueryChange={setQuery}
           onSearchSubmit={handleExactSearch}
+          gameFilterOptions={GAME_FILTER_OPTIONS}
+          selectedGameFilterKey={selectedGameFilterKey}
+          onGameFilterChange={handleGameFilterChange}
           isListLoading={isListLoading}
           listError={listError}
           filteredPokemon={filteredPokemon}

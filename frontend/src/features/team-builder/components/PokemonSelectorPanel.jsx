@@ -2,6 +2,9 @@ function PokemonSelectorPanel({
   query,
   onQueryChange,
   onSearchSubmit,
+  gameFilterOptions,
+  selectedGameFilterKey,
+  onGameFilterChange,
   isListLoading,
   listError,
   filteredPokemon,
@@ -10,6 +13,20 @@ function PokemonSelectorPanel({
   return (
     <section className="pixel-panel">
       <h2>Select Pokemon</h2>
+
+      <div className="game-filter-wrap">
+        <label htmlFor="game-filter-select" className="game-filter-label">Game Filter</label>
+        <select
+          id="game-filter-select"
+          className="game-filter-select"
+          value={selectedGameFilterKey}
+          onChange={(event) => onGameFilterChange(event.target.value)}
+        >
+          {gameFilterOptions.map((option) => (
+            <option key={option.key} value={option.key}>{option.label}</option>
+          ))}
+        </select>
+      </div>
 
       <form className="search-form" onSubmit={onSearchSubmit}>
         <input

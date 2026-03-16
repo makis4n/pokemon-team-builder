@@ -273,13 +273,11 @@ function buildCoverageInsight(weaknesses) {
     return null;
   }
 
-  const listedTypes = uncoveredTypes.slice(0, 4).join(', ');
-  const remainingCount = uncoveredTypes.length - 4;
-  const suffix = remainingCount > 0 ? `, +${remainingCount} more` : '';
+  const listedTypes = uncoveredTypes.join(', ');
 
   return {
     key: 'coverage',
-    message: `Coverage: No resist or immunity to ${listedTypes}${suffix}.`,
+    message: `Coverage: No resist or immunity to ${listedTypes}.`,
   };
 }
 
@@ -302,13 +300,38 @@ function buildQuadWeaknessInsight(team) {
     return null;
   }
 
-  const listedEntries = entries.slice(0, 3).join(', ');
-  const remainingCount = entries.length - 3;
-  const suffix = remainingCount > 0 ? `, +${remainingCount} more` : '';
+  const listedEntries = entries.join(', ');
 
   return {
     key: 'quad-risk',
-    message: `4x Risk: ${listedEntries}${suffix}.`,
+    message: `4x Risk: ${listedEntries}.`,
+  };
+}
+
+function buildImmunityInsight(team) {
+  const entries = [];
+
+  for (const pokemon of team) {
+    const profile = getDefensiveProfile(pokemon.types);
+    const categories = categoriseProfile(profile);
+
+    if (categories.immunities.length === 0) {
+      continue;
+    }
+
+    const immunityTypes = categories.immunities.map(toDisplayTypeName).join('/');
+    entries.push(`${toDisplayPokemonName(pokemon.name)} (${immunityTypes})`);
+  }
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const listedEntries = entries.join(', ');
+
+  return {
+    key: 'immunity',
+    message: `Immunity: ${listedEntries}.`,
   };
 }
 
@@ -324,6 +347,7 @@ function generateDefensiveInsights(team) {
     buildWeaknessInsight(weaknesses, teamSize),
     buildCoverageInsight(weaknesses),
     buildQuadWeaknessInsight(team),
+    buildImmunityInsight(team),
   ].filter(Boolean);
 }
 

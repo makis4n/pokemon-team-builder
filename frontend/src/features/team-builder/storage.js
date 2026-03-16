@@ -1,4 +1,7 @@
 import {
+  DEFAULT_GAME_FILTER_KEY,
+  GAME_FILTER_OPTION_BY_KEY,
+  GAME_FILTER_STORAGE_KEY,
   SWAP_RECOMMENDATIONS_STORAGE_KEY,
   TEAM_STORAGE_KEY,
 } from './constants'
@@ -22,6 +25,30 @@ export function getSafeTeamFromSession() {
 
 export function saveTeamToSession(team) {
   sessionStorage.setItem(TEAM_STORAGE_KEY, JSON.stringify(team))
+}
+
+export function getSelectedGameFilterFromSession() {
+  try {
+    const rawValue = sessionStorage.getItem(GAME_FILTER_STORAGE_KEY)
+    if (!rawValue) {
+      return DEFAULT_GAME_FILTER_KEY
+    }
+
+    const normalized = String(rawValue)
+    return GAME_FILTER_OPTION_BY_KEY[normalized] ? normalized : DEFAULT_GAME_FILTER_KEY
+  } catch {
+    return DEFAULT_GAME_FILTER_KEY
+  }
+}
+
+export function saveSelectedGameFilterToSession(gameFilterKey) {
+  const normalized = String(gameFilterKey)
+  if (!GAME_FILTER_OPTION_BY_KEY[normalized]) {
+    sessionStorage.setItem(GAME_FILTER_STORAGE_KEY, DEFAULT_GAME_FILTER_KEY)
+    return
+  }
+
+  sessionStorage.setItem(GAME_FILTER_STORAGE_KEY, normalized)
 }
 
 function getNamedCacheEnvelope(storageKey) {

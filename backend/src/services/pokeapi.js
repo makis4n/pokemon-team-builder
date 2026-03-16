@@ -4,6 +4,7 @@ const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFENSIVE_CANDIDATE_CACHE_TTL_MS = 5 * 60 * 1000;
 const SPECIES_CACHE_TTL_MS = 30 * 60 * 1000;
 const EVOLUTION_CHAIN_CACHE_TTL_MS = 30 * 60 * 1000;
+const GENERATION_SUMMARY_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_SCAN_LIMIT = 240;
 const DETAIL_BATCH_SIZE = 16;
 
@@ -12,6 +13,7 @@ const detailCache = new Map();
 const defensiveCandidateCache = new Map();
 const speciesCache = new Map();
 const evolutionChainCache = new Map();
+const generationSummaryCache = new Map();
 const inFlightPokeApiRequests = new Map();
 
 async function fetchFromPokeApi(path) {
@@ -173,20 +175,73 @@ async function getEvolutionMetaForSpecies(speciesId) {
   };
 }
 
-async function listPokemon({ search, limit = 20, offset = 0 }) {
+function getGenerationNumberFromSpecies(species) {
+  const generationFromUrl = extractIdFromUrl(species?.generation?.url);
+  if (generationFromUrl) {
+    return generationFromUrl;
+  }
+
+  const generationName = String(species?.generation?.name || '');
+  const match = generationName.match(/generation-(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
+async function getPokemonSummariesForGeneration(generationNumber) {
+  const normalizedGenerationNumber = Number(generationNumber);
+  if (!Number.isFinite(normalizedGenerationNumber) || normalizedGenerationNumber <= 0) {
+    return [];
+  }
+
+  const cacheKey = String(normalizedGenerationNumber);
+  const cachedGenerationList = readCache(generationSummaryCache, cacheKey);
+  if (cachedGenerationList) {
+    return cachedGenerationList;
+  }
+
+  const generationPayload = await fetchFromPokeApi(`/generation/${encodeURIComponent(normalizedGenerationNumber)}`);
+  const normalized = (generationPayload?.pokemon_species || [])
+    .map((species) => ({
+      id: extractIdFromUrl(species?.url),
+      name: species?.name,
+    }))
+    .filter((entry) => entry.id && entry.name)
+    .sort((left, right) => left.id - right.id);
+
+  writeCache(generationSummaryCache, cacheKey, normalized, GENERATION_SUMMARY_CACHE_TTL_MS);
+  return normalized;
+}
+
+async function listPokemon({ search, limit = 20, offset = 0, generationNumber = null }) {
+  const normalizedGenerationNumber = Number(generationNumber) || null;
+
   if (search) {
     const pokemon = await getPokemonByNameOrId(search.toLowerCase());
+
+    if (normalizedGenerationNumber && pokemon.generationNumber !== normalizedGenerationNumber) {
+      const error = new Error(`Pokemon not found in Generation ${normalizedGenerationNumber}`);
+      error.statusCode = 404;
+      throw error;
+    }
+
     return [pokemon];
   }
 
-  const cacheKey = `${limit}:${offset}`;
+  const cacheKey = `gen=${normalizedGenerationNumber || 'all'}:${limit}:${offset}`;
   const cachedList = readCache(listCache, cacheKey);
   if (cachedList) {
     return cachedList;
   }
 
-  const listResponse = await fetchFromPokeApi(`/pokemon?limit=${limit}&offset=${offset}`);
-  const normalized = listResponse.results.map(normalizePokemonSummary);
+  let normalized = [];
+
+  if (normalizedGenerationNumber) {
+    const generationSummaries = await getPokemonSummariesForGeneration(normalizedGenerationNumber);
+    normalized = generationSummaries.slice(offset, offset + limit);
+  } else {
+    const listResponse = await fetchFromPokeApi(`/pokemon?limit=${limit}&offset=${offset}`);
+    normalized = listResponse.results.map(normalizePokemonSummary);
+  }
+
   writeCache(listCache, cacheKey, normalized, LIST_CACHE_TTL_MS);
   return normalized;
 }
@@ -200,9 +255,16 @@ async function getPokemonByNameOrId(nameOrId) {
 
   const pokemon = await fetchFromPokeApi(`/pokemon/${encodeURIComponent(key)}`);
   const normalized = normalizePokemonDetail(pokemon);
-  writeCache(detailCache, key, normalized, DETAIL_CACHE_TTL_MS);
-  writeCache(detailCache, String(normalized.id), normalized, DETAIL_CACHE_TTL_MS);
-  return normalized;
+  const species = normalized.speciesId ? await getSpeciesData(normalized.speciesId) : null;
+  const generationNumber = species ? getGenerationNumberFromSpecies(species) : null;
+  const detailWithGeneration = {
+    ...normalized,
+    generationNumber,
+  };
+
+  writeCache(detailCache, String(normalized.id), detailWithGeneration, DETAIL_CACHE_TTL_MS);
+  writeCache(detailCache, key, detailWithGeneration, DETAIL_CACHE_TTL_MS);
+  return detailWithGeneration;
 }
 
 function getDefensiveMultiplier(attackingType, defendingTypes) {
@@ -298,16 +360,23 @@ const TYPE_CHART = {
   fairy: { fire: 0.5, fighting: 2, poison: 0.5, dragon: 2, dark: 2, steel: 0.5 },
 };
 
-async function listDefensiveCandidates({ weakTypes = [], excludeIds = [], limit = 90, scanLimit = DEFAULT_SCAN_LIMIT }) {
+async function listDefensiveCandidates({
+  weakTypes = [],
+  excludeIds = [],
+  limit = 90,
+  scanLimit = DEFAULT_SCAN_LIMIT,
+  generationNumber = null,
+}) {
   const cappedScanLimit = Math.min(Math.max(Number(scanLimit) || DEFAULT_SCAN_LIMIT, 40), 400);
   const cappedLimit = Math.min(Math.max(Number(limit) || 90, 1), 120);
+  const normalizedGenerationNumber = Number(generationNumber) || null;
   const sortedWeakTypes = [...(weakTypes || [])].map((type) => String(type).toLowerCase()).sort((a, b) => a.localeCompare(b));
   const sortedExcludeIds = [...(excludeIds || [])]
     .map((value) => Number(value))
     .filter(Boolean)
     .sort((left, right) => left - right);
 
-  const cacheKey = `weak=${sortedWeakTypes.join(',')}|exclude=${sortedExcludeIds.join(',')}|limit=${cappedLimit}|scan=${cappedScanLimit}`;
+  const cacheKey = `weak=${sortedWeakTypes.join(',')}|exclude=${sortedExcludeIds.join(',')}|limit=${cappedLimit}|scan=${cappedScanLimit}|gen=${normalizedGenerationNumber || 'all'}`;
   const cachedCandidates = readCache(defensiveCandidateCache, cacheKey);
   if (cachedCandidates) {
     return cachedCandidates;
@@ -315,7 +384,11 @@ async function listDefensiveCandidates({ weakTypes = [], excludeIds = [], limit 
 
   const idsToExclude = new Set(sortedExcludeIds);
 
-  const summaries = await listPokemon({ limit: cappedScanLimit, offset: 0 });
+  const summaries = await listPokemon({
+    limit: cappedScanLimit,
+    offset: 0,
+    generationNumber: normalizedGenerationNumber,
+  });
   const candidateIds = summaries
     .map((summary) => summary?.id)
     .filter((id) => id && !idsToExclude.has(id));

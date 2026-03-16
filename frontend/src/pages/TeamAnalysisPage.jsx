@@ -6,8 +6,13 @@ import {
   buildRoleByPokemonId,
 } from '../features/team-analysis/roleAnalysis'
 import { fetchDefensiveSwapRecommendations, fetchTeamDefenseAnalysis } from '../features/team-builder/api'
-import { statLabels } from '../features/team-builder/constants'
 import {
+  DEFAULT_GAME_FILTER_KEY,
+  GAME_FILTER_OPTION_BY_KEY,
+  statLabels,
+} from '../features/team-builder/constants'
+import {
+  getSelectedGameFilterFromSession,
   getSwapRecommendationsFromSession,
   saveSwapRecommendationsToSession,
 } from '../features/team-builder/storage'
@@ -18,14 +23,14 @@ const RADAR_STAT_ORDER = ['hp', 'attack', 'defense', 'special-attack', 'special-
 const RECOMMENDATION_CANDIDATE_LIMIT = 90
 const RECOMMENDATION_SOURCE_MAX_SCAN = 240
 
-function getRecommendationCacheKey(team) {
+function getRecommendationCacheKey(team, gameFilterKey) {
   const teamIdSignature = team
     .map((pokemon) => pokemon.id)
     .filter(Boolean)
     .sort((left, right) => left - right)
     .join(',')
 
-  return `${teamIdSignature}::swap-v2`
+  return `${teamIdSignature}::${gameFilterKey}::swap-v3`
 }
 
 function TeamAnalysisPage({ team, teamLimit }) {
@@ -35,6 +40,9 @@ function TeamAnalysisPage({ team, teamLimit }) {
   const [swapRecommendations, setSwapRecommendations] = useState([])
   const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(false)
   const [recommendationsError, setRecommendationsError] = useState('')
+  const selectedGameFilterKey = getSelectedGameFilterFromSession()
+  const selectedGameFilter = GAME_FILTER_OPTION_BY_KEY[selectedGameFilterKey]
+    ?? GAME_FILTER_OPTION_BY_KEY[DEFAULT_GAME_FILTER_KEY]
 
   useEffect(() => {
     if (team.length === 0) {
@@ -81,7 +89,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
     }
 
     let isActive = true
-    const recommendationCacheKey = getRecommendationCacheKey(team)
+    const recommendationCacheKey = getRecommendationCacheKey(team, selectedGameFilterKey)
 
     async function loadSwapRecommendations() {
       setIsRecommendationsLoading(true)
@@ -103,6 +111,12 @@ function TeamAnalysisPage({ team, teamLimit }) {
           topK: 5,
           candidateLimit: RECOMMENDATION_CANDIDATE_LIMIT,
           scanLimit: RECOMMENDATION_SOURCE_MAX_SCAN,
+          generationFilter: {
+            enabled: Boolean(selectedGameFilter?.generationNumber),
+            gameFilterKey: selectedGameFilterKey,
+            gameFilterLabel: selectedGameFilter?.label ?? '',
+            generationNumber: selectedGameFilter?.generationNumber ?? null,
+          },
         })
         const recommendations = payload.data ?? []
 
@@ -117,6 +131,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
           return
         }
 
+        setSwapRecommendations([])
         setRecommendationsError(error.message)
       } finally {
         if (isActive) {
@@ -130,7 +145,7 @@ function TeamAnalysisPage({ team, teamLimit }) {
     return () => {
       isActive = false
     }
-  }, [team])
+  }, [selectedGameFilter, selectedGameFilterKey, team])
 
   const roleBreakdown = useMemo(() => buildRoleBreakdown(team), [team])
   const teamSlots = useMemo(
