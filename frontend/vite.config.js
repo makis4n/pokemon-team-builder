@@ -9,7 +9,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true,
-    allowedHosts: ['pokepal.up.railway.app'],
     proxy: {
       '/api': {
         target: apiProxyTarget,
