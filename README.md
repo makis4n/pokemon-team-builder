@@ -211,23 +211,23 @@ POST /api/pokemon/defensive-swaps
 
 Endpoint purposes:
 
-- GET /health
+- `GET /health`
   - Lightweight health probe for uptime/readiness checks.
-- GET /api/ping
+- `GET /api/ping`
   - Simple connectivity check between frontend and backend.
-- GET /api/pokemon?search=&limit=&offset=&gameFilterKey=
+- `GET /api/pokemon?search=&limit=&offset=&gameFilterKey=`
   - Returns searchable/paginated Pokemon list, optionally constrained by selected game filter.
-- GET /api/pokemon/:nameOrId
+- `GET /api/pokemon/:nameOrId`
   - Returns core Pokemon details used by builder previews and base panels.
-- GET /api/pokemon/:nameOrId/team-detail?gameFilterKey=&includeMoveDetails=
+- `GET /api/pokemon/:nameOrId/team-detail?gameFilterKey=&includeMoveDetails=`
   - Returns enriched team-detail payload (evolution, encounters, and move data), with summary/full mode control.
-- GET /api/pokemon/moves/:moveName
+- `GET /api/pokemon/moves/:moveName`
   - Returns detailed move metadata for lazy-expanded move rows.
-- GET /api/pokemon/defensive-candidates?weakTypes=&excludeIds=&limit=&scanLimit=&gameFilterKey=
+- `GET /api/pokemon/defensive-candidates?weakTypes=&excludeIds=&limit=&scanLimit=&gameFilterKey=`
   - Produces candidate pool for defensive swap computation, respecting exclusions and filter scope.
-- POST /api/pokemon/team-defense-analysis
+- `POST /api/pokemon/team-defense-analysis`
   - Computes team defensive profile (weakness pressure, coverage signals, and analysis summary).
-- POST /api/pokemon/defensive-swaps
+- `POST /api/pokemon/defensive-swaps`
   - Scores and returns ranked defensive replacement suggestions for current team slots.
 
 ### Key Design Choices
